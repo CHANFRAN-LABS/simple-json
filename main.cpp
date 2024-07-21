@@ -59,6 +59,27 @@ public:
 		return m_childElement;
 	}
 
+	void copyChild() {
+		Attribute* newAttribute = new Attribute;
+		*newAttribute = *m_childElement;
+		m_childElement = newAttribute;
+		m_childElement->m_parentElement = this;
+	}
+
+	void copyNext() {
+		Attribute* newAttribute = new Attribute;
+		*newAttribute = *m_nextElement;
+		m_nextElement = newAttribute;
+		m_nextElement->m_parentElement = m_parentElement;
+	}
+
+	void cleanFirstElement() {
+		m_key = "";
+		m_value = "";
+		m_nextElement = new Attribute;	//set next element to empty attribute to mark the end of the linked list
+		m_parentElement = nullptr;
+	}
+
 	/**
 	 * @fn saveValue()
 	 * @param value the value to be saved
@@ -79,6 +100,48 @@ public:
 		} else {
 			throw invalid_argument("invalid json value");
 			//value is not a valid json value
+		}
+	}
+
+	string getKey() {
+		switch (m_parentElement->m_valueType) {
+			case ARRAY:
+				return "";
+			case OBJECT:
+				return "\"" + m_key + "\": ";
+			default:
+				return "";
+				//throw error?
+		} 
+		
+	}
+
+	string getValue() {
+		if (m_valueType == STRING) return "\"" + m_value + "\"";
+		return m_value;
+	}
+
+	string getOpenBracket() {
+		switch (m_valueType) {
+			case OBJECT:
+				return "{";
+			case ARRAY:
+				return "[";
+			default:
+				//throw error?
+				return "";
+		}
+	}
+
+	string getCloseBracket() {
+		switch (m_valueType) {
+			case OBJECT:
+				return "}";
+			case ARRAY:
+				return "]";
+			default:
+				//throw error?
+				return "";
 		}
 	}
 
@@ -127,6 +190,15 @@ public:
 	*/
 	easyJson(string input) {
 		cleanAndParse(input);
+	}
+
+	easyJson (Attribute* baseElement) {
+		m_firstElement = new Attribute();
+		*m_firstElement = *(baseElement);
+		m_firstElement->cleanFirstElement();
+		walkAndCopy();
+		m_jsonString = generateJsonString();
+		//do we need clean string?
 	}
 
 	/**
@@ -208,6 +280,37 @@ public:
 		return pNewAttribute;
 	}
 
+// change current parent's next to null, change current element parent to current parents parent, and then change new parent next to current element
+
+	Attribute* findByKey(string key) {
+		Attribute* pAttribute = m_firstElement->m_childElement;
+		while(pAttribute->m_nextElement) {
+			if (pAttribute->m_key == key) return pAttribute;
+			pAttribute = pAttribute->m_nextElement;
+		}
+		return nullptr;
+	}
+
+	void walkAndCopy() {
+		Attribute* pAttribute = m_firstElement;
+		while(true) {
+			if (pAttribute->getChild()) {
+				pAttribute->copyChild();
+				m_pElements.push_back(pAttribute);
+				pAttribute = pAttribute->getChild();
+			} else if (pAttribute->getNext()) {
+				pAttribute->copyNext();
+				m_pElements.push_back(pAttribute);
+				pAttribute = pAttribute->getNext();
+			} else if (pAttribute->getParent()) {
+				m_pElements.push_back(pAttribute);
+				pAttribute = pAttribute->getParent()->getNext();
+			} else {
+				break;
+			}
+		}
+	}
+
 	// /**
 	//  * loop through the json attributes and return the attribute with the specified ID 
 	// */
@@ -272,6 +375,7 @@ public:
 	*/
 	void parseJsonString(string input) {
 		bool running = true;
+		int exitingParent = 0;
 		size_t pos;
 		char delimiter;
 
@@ -280,7 +384,6 @@ public:
 		m_pElements.push_back(pAttribute);
 
 		while (running == true) {
-			cout << "input: " << input << endl;
 			delimiter = findNextDelimiter(input);
 
 			switch (delimiter) {
@@ -292,6 +395,10 @@ public:
 				
 				case ',':
 					pos = input.find_first_of(',');
+					if (exitingParent) {
+						input.erase(0, pos+1);
+						break; 
+					}
 					pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
 					input.erase(0, pos+1);
 					pAttribute = addAttribute(pAttribute);
@@ -307,9 +414,17 @@ public:
 				case '}':
 				{
 					pos = input.find_first_of('}');
+					//check for comma or } or ]? as next delimiter
+					//if comma just do the usual then delete the comma
+					//if } do the usual but call a different version of add last child then delete the second }
+					if (exitingParent) {
+						input.erase(0, pos+1);
+						break; 
+					}
 					pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY); //this is empty string for double closing bracket which gives type: object - but maybe thats fine as its the closing up of the parent object?
 					input.erase(0, pos+1);
 					pAttribute = addLastChild(pAttribute);
+					exitingParent+=2;
 					break;
 				}
 
@@ -326,15 +441,22 @@ public:
 				case ']':
 				{
 					pos = input.find_first_of(']');
+					if (exitingParent) {
+						input.erase(0, pos+1);
+						break; 
+					}
 					pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
 					input.erase(0, pos+1);
 					pAttribute = addLastChild(pAttribute);
+					exitingParent+=2;
 					break;
 				}
 
 				default:
 					cout << "default" << endl;
 			}
+
+			if (exitingParent>0) exitingParent--; //must be better way to do this
 
 			if (input == "") {
 				running = false;
@@ -343,6 +465,10 @@ public:
 				// }
 			}
 		}
+	}
+
+	string removeLeadingTrailing(string input) {
+		return input.substr(4, input.length()-6);
 	}
 
 	/**
@@ -355,45 +481,33 @@ public:
 		while(true) {
 			Attribute currentAttribute = *pAttribute;
 			if (currentAttribute.getChild()) {
-				output.append("{" + currentAttribute.m_key + ":" + currentAttribute.m_value);
+				output.append("\"" + currentAttribute.m_key + "\": " + currentAttribute.getOpenBracket()); //could put the first bit in getKey by returning the non empty option if (getChild)
 				pAttribute = currentAttribute.getChild();
 			} else if (currentAttribute.getNext()) {
-				output.append("," + currentAttribute.m_key + ":" + currentAttribute.m_value);
+				output.append(currentAttribute.getKey() + currentAttribute.getValue() + ", ");
 				pAttribute = currentAttribute.getNext();
 			} else if (currentAttribute.getParent()) {
-				output.append("," + currentAttribute.m_key + ":" + currentAttribute.m_value + "},");
+				output.append(currentAttribute.getKey() + currentAttribute.getValue() + currentAttribute.getParent()->getCloseBracket() + ", ");
 				pAttribute = currentAttribute.getParent()->getNext();
 			} else {
 				break;
 			}
 		}
+		output = removeLeadingTrailing(output);
 		return output;
 	}
 
-	// /**
-	//  * query easyJson object by key
-	//  * get the attribute which represents the given key
-	//  * then call getAllChildren to get all its children and return them
-	// */
-	// easyJson get (string key) {
-	// 	Attribute attribute;
-	// 	//could use getDirectChildren here
-	// 	for (int i = 0; i < m_jsonAttributes.size(); i++) {
-	// 		Attribute currentAttribute = m_jsonAttributes[i];
-	// 		if (currentAttribute.m_key == key && currentAttribute.m_parentId == m_baseId) {
-	// 			attribute = currentAttribute;
-	// 		}
-	// 	}
-
-	// 	vector<Attribute> outputAttributes;
-	// 	if (attribute.m_valueType == attribute.OBJECT || attribute.m_valueType == attribute.ARRAY) {
-	// 		outputAttributes = getAllChildren(attribute.m_id);
-	// 	} else {
-	// 		outputAttributes.push_back(attribute);
-	// 	}
-
-	// 	return outputAttributes;
-	// }
+	/**
+	 * query easyJson object by key
+	 * get the attribute which represents the given key
+	 * then call getAllChildren to get all its children and return them
+	*/
+	easyJson get (string key) {
+		Attribute* firstElement = findByKey(key);
+		if (!firstElement) throw invalid_argument("key not found"); //prob should just return empty easyJson with easy way to see if empty after user gets it
+		easyJson output(firstElement);
+		return output;
+	}
 
 	// /**
 	//  * query easyJson object by index (used when object is an array)
@@ -530,19 +644,21 @@ string arrayBase = "[true, true, false]";
 // ostream.close();
 
 //read json from string literal
-easyJson myJson(midJson);
+easyJson myJson(bigJson);
 
 //compare input to output
 cout << myJson.m_jsonString << endl;
 cout << myJson.generateJsonString() << endl;
 
-cout << "end" << endl;
+
 // //set json values - object
 // myJson.key("skills").set("false");
 // myJson.key("age").set("27");
 
-// //get json object
-// easyJson skills = myJson.get("skills");
+//get json object
+easyJson skills = myJson.get("parents");
+
+cout << "end" << endl;
 
 // //set json values - array
 // fileJson.key("answers").key(2).set("true");
