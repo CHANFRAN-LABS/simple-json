@@ -38,6 +38,7 @@ public:
 		Attribute* m_nextElement = nullptr;
 		Attribute* m_parentElement = nullptr;
 		Attribute* m_childElement = nullptr;
+		Attribute* m_prevElement = nullptr;
 	}
 
 	string m_key;
@@ -46,6 +47,7 @@ public:
 	Attribute* m_nextElement = nullptr;
 	Attribute* m_parentElement = nullptr;
 	Attribute* m_childElement = nullptr;
+	Attribute* m_prevElement = nullptr;
 
 	Attribute* getNext() {
 		return m_nextElement;
@@ -275,12 +277,20 @@ public:
 	Attribute* addLastChild (Attribute* pCurrentAttribute) {
 		Attribute* pNewAttribute = new Attribute();
 		pNewAttribute->m_parentElement = pCurrentAttribute->m_parentElement->m_parentElement;
+		pNewAttribute->m_prevElement = pCurrentAttribute->m_parentElement;
 		pCurrentAttribute->m_parentElement->m_nextElement = pNewAttribute;
 		m_pElements.push_back(pNewAttribute);
 		return pNewAttribute;
 	}
 
-// change current parent's next to null, change current element parent to current parents parent, and then change new parent next to current element
+	/**
+	 * @brief If exiting more than one parent in a row in generateJsonString, we need to move the element we created up to the next parent
+	 */
+	void moveNextUp (Attribute* pCurrentAttribute) {
+		pCurrentAttribute->m_prevElement->m_nextElement = nullptr;
+		pCurrentAttribute->m_parentElement->m_nextElement = pCurrentAttribute;
+		pCurrentAttribute->m_parentElement = pCurrentAttribute->m_parentElement->m_parentElement;
+	}
 
 	Attribute* findByKey(string key) {
 		Attribute* pAttribute = m_firstElement->m_childElement;
@@ -397,11 +407,11 @@ public:
 					pos = input.find_first_of(',');
 					if (exitingParent) {
 						input.erase(0, pos+1);
-						break; 
+					} else {
+						pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
+						input.erase(0, pos+1);
+						pAttribute = addAttribute(pAttribute);
 					}
-					pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
-					input.erase(0, pos+1);
-					pAttribute = addAttribute(pAttribute);
 					break;
 
 				case '{':
@@ -414,17 +424,16 @@ public:
 				case '}':
 				{
 					pos = input.find_first_of('}');
-					//check for comma or } or ]? as next delimiter
-					//if comma just do the usual then delete the comma
-					//if } do the usual but call a different version of add last child then delete the second }
 					if (exitingParent) {
+						moveNextUp(pAttribute);
 						input.erase(0, pos+1);
-						break; 
+						exitingParent+=1;
+					} else {
+						pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY); //this is empty string for double closing bracket which gives type: object - but maybe thats fine as its the closing up of the parent object?
+						input.erase(0, pos+1);
+						pAttribute = addLastChild(pAttribute);
+						exitingParent+=2;
 					}
-					pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY); //this is empty string for double closing bracket which gives type: object - but maybe thats fine as its the closing up of the parent object?
-					input.erase(0, pos+1);
-					pAttribute = addLastChild(pAttribute);
-					exitingParent+=2;
 					break;
 				}
 
@@ -471,15 +480,35 @@ public:
 		return input.substr(4, input.length()-6);
 	}
 
+	// Attribute* findCorrectParent(Attribute* pAttribute) {
+	// 	while (true) {
+	// 		if (pAttribute->getParent()->getNext()) {
+	// 			return pAttribute;
+	// 		}
+	// 		pAttribute = pAttribute->m_parentElement;
+	// 	}
+	// }
+
 	/**
 	 * @brief generate string representation of the json attributes - ready to be saved to file
 	 */
 	string generateJsonString () {
 		string output;
 		Attribute* pAttribute = m_firstElement;
-		bool bListEnd = true;
+		bool exitingParent = false;
 		while(true) {
 			Attribute currentAttribute = *pAttribute;
+			if (exitingParent) {
+				if (currentAttribute.getParent()->getNext()) {
+					exitingParent = false;
+					pAttribute = currentAttribute.getParent()->getNext();
+					output.append(", ");
+					continue;
+				}
+				output.append("}");
+				pAttribute = currentAttribute.getParent();
+				continue;
+			}
 			if (currentAttribute.getChild()) {
 				output.append("\"" + currentAttribute.m_key + "\": " + currentAttribute.getOpenBracket()); //could put the first bit in getKey by returning the non empty option if (getChild)
 				pAttribute = currentAttribute.getChild();
@@ -487,8 +516,13 @@ public:
 				output.append(currentAttribute.getKey() + currentAttribute.getValue() + ", ");
 				pAttribute = currentAttribute.getNext();
 			} else if (currentAttribute.getParent()) {
-				output.append(currentAttribute.getKey() + currentAttribute.getValue() + currentAttribute.getParent()->getCloseBracket() + ", ");
-				pAttribute = currentAttribute.getParent()->getNext();
+				output.append(currentAttribute.getKey() + currentAttribute.getValue() + currentAttribute.getParent()->getCloseBracket());
+				if (currentAttribute.getParent()->getNext()) {
+					output.append(", ");
+					pAttribute = currentAttribute.getParent()->getNext();
+				} else {
+					exitingParent = true;
+				}
 			} else {
 				break;
 			}
