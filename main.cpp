@@ -82,7 +82,7 @@ public:
 	void cleanFirstElement() {
 		m_key = "";
 		m_value = "";
-		m_nextElement = nullptr;	//set next element to empty attribute to mark the end of the linked list
+		m_nextElement = new Attribute;	//set next element to empty attribute to mark the end of the linked list
 		m_parentElement = nullptr;
 	}
 
