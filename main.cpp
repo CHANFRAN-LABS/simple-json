@@ -82,7 +82,7 @@ public:
 	void cleanFirstElement() {
 		m_key = "";
 		m_value = "";
-		m_nextElement = new Attribute;	//set next element to empty attribute to mark the end of the linked list
+		m_nextElement = nullptr;	//set next element to empty attribute to mark the end of the linked list
 		m_parentElement = nullptr;
 	}
 
@@ -120,6 +120,9 @@ public:
 		}
 	}
 
+	/**
+	 * what is this for?
+	 */
 	string getKey() {
 		switch (m_parentElement->m_valueType) {
 			case ARRAY:
@@ -129,8 +132,7 @@ public:
 			default:
 				return "";
 				//throw error?
-		} 
-		
+		}
 	}
 
 	string getValue() {
@@ -190,17 +192,6 @@ public:
 	Attribute* m_firstElement;
 	Attribute* m_queryElement = nullptr;
 	list<Attribute*> m_pElements;
-	
-	// /**
-	//  * @fn easyJson constructor
-	//  * @param jsonAttributes vector of Attributes that represent json object
-	//  * this constructor is used when creating one easyJson object from another (eg when json is queried)
-	// */
-	// easyJson(vector<Attribute> jsonAttributes) {
-	// 	m_jsonAttributes = jsonAttributes;
-	// 	m_baseId = m_jsonAttributes[0].m_parentId;	//not sure if this is a really bad idea
-	// 	//also prob stringify it and store that into m_jsonString & m_cleanString
-	// }
 
 	/**
 	 * constructor - used when parsing a json string
@@ -324,6 +315,13 @@ public:
 	}
 
 	/**
+	 * @brief checks if we have returned to the first element, at which point we have finished parsing the string
+	 */
+	bool backToStart(Attribute* pCurrentAttribute) {
+		return pCurrentAttribute->getParent() == m_firstElement;
+	}
+
+	/**
 	 * @brief If exiting more than one parent in a row in generateJsonString, we need to move the element we created up to the next parent
 	 */
 	void moveNextUp (Attribute* pCurrentAttribute) {
@@ -339,6 +337,7 @@ public:
 	Attribute* walkBackwards(Attribute* pAttribute) {
 		while (pAttribute) {
 			pAttribute = pAttribute->getParent();
+			if (!pAttribute) return nullptr;	//end of list reached
 			if (pAttribute->getNext()) {
 				return pAttribute->getNext();
 			}
@@ -348,7 +347,7 @@ public:
 
 	void walkAndCopy() {
 		Attribute* pAttribute = m_firstElement;
-		while(true) {
+		while(pAttribute) {
 			if (pAttribute->getChild()) {
 				pAttribute->copyChild();
 				m_pElements.push_back(pAttribute);
@@ -365,65 +364,6 @@ public:
 			}
 		}
 	}
-
-	// /**
-	//  * loop through the json attributes and return the attribute with the specified ID 
-	// */
-	// Attribute getParent (int parentId) {
-	// 	Attribute attribute;
-	// 	for (int i = 0; i < m_jsonAttributes.size(); i++) {
-	// 		Attribute currentAttribute = m_jsonAttributes[i];
-	// 		if (currentAttribute.m_id == parentId) {
-	// 			attribute = currentAttribute;
-	// 		}
-	// 	}
-
-	// 	return attribute;
-	// }
-
-	// /**
-	//  * loop through the attributes and return all which are direct children of specified parent
-	// */
-	// vector<Attribute> getDirectChildren(int parentId) {
-	// 	vector<Attribute> childAttributes;
-	// 	for (int i = 0; i < m_jsonAttributes.size(); i++) {
-	// 		Attribute currentAttribute = m_jsonAttributes[i];
-	// 		if (currentAttribute.m_parentId == parentId) {
-	// 			childAttributes.push_back(currentAttribute);
-	// 		}
-	// 	}
-
-	// 	return childAttributes;
-	// }
-
-	// /**
-	//  * return all attributes which are direct children, or children of those children, of specified parent
-	// */
-	// vector<Attribute> getAllChildren(int parentId) {
-	// 	vector<Attribute> childAttributes;
-	// 	std::set <int> parentIds = {parentId};
-	// 	for (int i = 0; i < m_jsonAttributes.size(); i++) {
-	// 		Attribute currentAttribute = m_jsonAttributes[i];
-	// 		if (parentIds.find(currentAttribute.m_parentId) != parentIds.end()) {
-	// 			childAttributes.push_back(currentAttribute);
-	// 			parentIds.insert(currentAttribute.m_id);	//this relies on no children ever appearing before their parent in m_jsonAttributes !!!
-	// 		}
-	// 	}
-
-	// 	return childAttributes;
-	// }
-
-	// void deleteAllChildren(int parentId) {
-	// 	std::set <int> parentIds = {parentId};
-	// 	for (int i = 0; i < m_jsonAttributes.size(); i++) {
-	// 		Attribute currentAttribute = m_jsonAttributes[i];	//think all these instances of currentAttribute are pointless and waste memory
-	// 		if (parentIds.find(currentAttribute.m_parentId) != parentIds.end()) {
-	// 			parentIds.insert(currentAttribute.m_id);	//this relies on no children ever appearing before their parent in m_jsonAttributes !!!
-	// 			m_jsonAttributes.erase(m_jsonAttributes.begin()+i);
-	// 		}
-	// 	}
-	// }
-
 
 	/**
 	 * parse json string, searching for special characters and generating attributes to represent the string as a json object
@@ -476,6 +416,7 @@ public:
 					} else {
 						pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
 						input.erase(0, pos+1);
+						if (backToStart(pAttribute)) break;
 						pAttribute = addLastChild(pAttribute);
 						exitingParent = true;
 					}
@@ -507,7 +448,7 @@ public:
 				}
 
 				default:
-					cout << "default" << endl;
+						throw invalid_argument("string is not a valid json");
 			}
 		}
 	}
@@ -517,7 +458,7 @@ public:
 
 	//need to look at this - surely shouldn't be neccessary
 	string removeLeadingTrailing(string input) {
-		return input.substr(4, input.length()-6);
+		return input.substr(4, input.length()-4);
 	}
 
 
@@ -528,6 +469,7 @@ public:
 	Attribute* findNextElement(Attribute* pAttribute, string &output) {
 		while (pAttribute) {
 			pAttribute = pAttribute->getParent();
+			if (!pAttribute) return nullptr;	//reached end of list
 			output.append(pAttribute->getCloseBracket());
 			if (pAttribute->getNext()) {
 				output.append(", ");
@@ -547,7 +489,7 @@ public:
 			return m_firstElement->getValue();
 		}
 		bool exitingParent = false;
-		while(true) {
+		while(pAttribute) {
 			Attribute currentAttribute = *pAttribute;
 			if (currentAttribute.getChild()) {
 				output.append("\"" + currentAttribute.m_key + "\": " + currentAttribute.getOpenBracket()); //could put the first bit in getKey by returning the non empty option if (getChild)
@@ -570,7 +512,7 @@ public:
 
 	Attribute* getElement(string key) {
 		Attribute* pAttribute = m_firstElement->m_childElement;
-		while(pAttribute->m_nextElement) {
+		while(pAttribute) {
 			if (pAttribute->m_key == key) return pAttribute;
 			pAttribute = pAttribute->getNext();
 		}
@@ -580,7 +522,7 @@ public:
 	Attribute* getElement(int index) {
 		Attribute* pAttribute = m_firstElement->m_childElement;
 		int current = 0;
-		while(pAttribute->m_nextElement) {
+		while(pAttribute) {
 			if (current == index) return pAttribute;
 			pAttribute = pAttribute->getNext();
 			current++;
@@ -632,22 +574,49 @@ public:
 	}
 
 	float getFloat() {
-		if(m_firstElement->m_valueType != Attribute::valueType::BOOL) throw invalid_argument("element is not a number");
+		if(m_firstElement->m_valueType != Attribute::valueType::NUMBER) throw invalid_argument("element is not a number");
 		return stof(m_firstElement->getValue());
 	}
 
 	//----------------------------- SET METHODS ------------------------------//
 
+	/**
+	 * @brief lookup element to be set by key - if not found add a new element
+	 */
 	Attribute* findOrAddElement(string key) {
 		Attribute* pAttribute = m_firstElement->getChild();
 		if (m_queryElement) pAttribute = m_queryElement;
-		while(pAttribute->m_nextElement) {
+		while(pAttribute) {
 			if (pAttribute->m_key == key) return pAttribute;
 			if (pAttribute->getNext()) {
 				pAttribute = pAttribute->getNext();
 			} else {
-				return addAttribute(pAttribute);
+				pAttribute = addAttribute(pAttribute);
+				pAttribute->saveKey(key);
+				return pAttribute;
 			}
+		}
+		return nullptr;
+	}
+
+	/**
+	 * @brief lookup element to be set by index - if not found add a new element at the specified index
+	 */
+	Attribute* findOrAddElement(int index) {
+		Attribute* pAttribute = m_firstElement->getChild();
+		if (m_queryElement) pAttribute = m_queryElement;
+		int current = 0;
+		while(pAttribute) {
+			if (current == index) return pAttribute;
+			if (pAttribute->getNext()) {
+				pAttribute = pAttribute->getNext();
+			} else {
+				if (current == index) return addAttribute(pAttribute);
+				//add empty elements until we reach the specified index
+				pAttribute = addAttribute(pAttribute);
+				pAttribute->saveValue("null");
+			}
+			current++;
 		}
 		return nullptr;
 	}
@@ -662,11 +631,21 @@ public:
 	}
 
 	/**
+	 * find by key the element which should be set in subsequent call to set() 
+	*/
+	easyJson& key (int index) {
+		m_queryElement = findOrAddElement(index);
+		if (!m_queryElement) throw invalid_argument("could not find or create this key");
+		return *this;
+	}
+
+	/**
 	 * set the value of the element identified by key() to a bool 
 	*/
 	void setBool(string value) {
-		if (value != "true" && value != "false" || value != "null") throw invalid_argument("this value cannot be interpreted as a bool");
+		if (value != "true" && value != "false" && value != "null") throw invalid_argument("this value cannot be interpreted as a bool");
 		m_queryElement->saveValue(value);
+		m_queryElement = nullptr;
 	}
 
 	/**
@@ -674,6 +653,7 @@ public:
 	*/
 	void setString(string value) {
 		m_queryElement->saveValue("\"" + value + "\"");
+		m_queryElement = nullptr;
 	}
 
 	/**
@@ -682,6 +662,7 @@ public:
 	void setFloat(string value) {
 		if (!Attribute::isFloat(value)) throw invalid_argument("this value cannot be interpreted as a number");
 		m_queryElement->saveValue(value);
+		m_queryElement = nullptr;
 	}
 
 };
@@ -690,11 +671,8 @@ public:
 int main() {
 
 string example = "{\"person\": {\"name\": \"charlie\", \"skills\": true, \"age\": 27}}";
-string midJson = "{\"name\": \"charlie\", \"skills\": {\"drawing\": true, \"writing\": \"advanced\"}, \"driver\": \"yes\"}";
-string arrayJson = "{\"name\": \"charlie\", \"skills\": [true, true, false], \"drives\": \"yes\"}";
-string bigJson = "{ \"name\":\"charlie\", \"age\":24, \"parents\": { \"mother\": true, \"father\": { \"name\": \"steve\", \"age\": \"50\" }}, \"dob\": \"123456\"}";
-string numberJson = "{\"name\": \"charlie\", \"int\": 5, \"float\": 0.4214231, \"exp\": 8e6}";
-string arrayBase = "[true, true, false]";
+string arrayExample = "{\"name\": \"charlie\", \"skills\": [5, \"drawing\", false], \"drives\": \"yes\"}";
+string largeExample = "{ \"name\":\"charlie\", \"age\":24, \"parents\": { \"mother\": true, \"father\": { \"name\": \"steve\", \"age\": \"50\" }}, \"dob\": \"123456\"}";
 
 // //read json from file
 // ifstream stream("./json-examples/test.json");
@@ -708,47 +686,74 @@ string arrayBase = "[true, true, false]";
 // ostream.close();
 
 //read json from string literal
-easyJson exampleJson(arrayJson);
+easyJson exampleJson(example);
 
 //compare input string literal to serialised json object
 cout << exampleJson.m_jsonString << endl;
 cout << exampleJson.generateJsonString() << endl;
 
 //get json object
-easyJson person = exampleJson.get("skills").get(2);
+easyJson person = exampleJson.get("person");
 
 //serialise the new json
 cout << person.generateJsonString() << endl;
 
-// //get string value from json
-// string name;
-// if (person.get("name").isString()) {
-// 	name = person.get("name").getString();
-// }
+//get string value from json
+string name;
+if (person.get("name").isString()) {
+	name = person.get("name").getString();
+}
 
-// //get bool value from json
-// bool skills;
-// if (person.get("skills").isBool()) {
-// 	skills = person.get("skills").getBool();
-// }
+//get bool value from json
+bool skills;
+if (person.get("skills").isBool()) {
+	skills = person.get("skills").getBool();
+}
 
-// //get float value from json
-// float age;
-// if (person.get("age").isFloat()) {
-// 	age = person.get("age").getFloat();
-// }
+//get float value from json
+float age;
+if (person.get("age").isFloat()) {
+	age = person.get("age").getFloat();
+}
 
-// //set json value to string
-// person.key("skills").setString("coding");
+//set json value to string
+person.key("skills").setString("coding");
 
-// //set json value to bool
-// person.key("skills").setBool("false");
+//set json value to bool
+person.key("skills").setBool("false");
 
-// //set json value to float
-// person.key("age").setFloat("36");
+//set json value to float
+person.key("age").setFloat("36");
 
-// //serialise the modified json
-// cout << person.generateJsonString() << endl;
+//set new json value
+person.key("city").setString("london");
+
+//serialise the modified json
+cout << person.generateJsonString() << endl;
+
+//read json with array from string literal
+easyJson individual(arrayExample);
+
+//get json array
+easyJson my_skills = individual.get("skills");
+
+//serialise new json
+cout << my_skills.generateJsonString() << endl;
+
+//get string value from array
+string skill;
+if (my_skills.get(1).isString()) {
+	skill = my_skills.get(1).getString();
+}
+
+//set float value to array
+my_skills.key(2).setFloat("567");
+
+//add a string to array (null values are added inbewteen)
+my_skills.key(6).setString("dancing");
+
+//serialise the modified json
+cout << my_skills.generateJsonString() << endl;
 
 cout << "end" << endl;
 }
