@@ -110,8 +110,10 @@ public:
 		} else if (value[0] == '\"') {
 			m_valueType = STRING;
 			m_value = value.substr(1,value.size()-2);
-		} else if (value == "true" || value == "false" || value == "null") {
+		} else if (value == "true" || value == "false") {
 			m_valueType = BOOL;
+		} else if (value == "null") {
+			m_valueType = EMPTY;
 		} else if (isFloat(value)) {
 			m_valueType = NUMBER;
 		} else {
@@ -176,10 +178,32 @@ public:
 	}
 
 	/**
+	 * set the value of the element identified by key() to a bool 
+	*/
+	void setBool(bool value) {
+		string strValue = value ? "true" : "false";
+		saveValue(strValue);
+	}
+
+	/**
 	 * set the value of the element identified by key() to a string 
 	*/
 	void setString(string value) {
 		saveValue("\"" + value + "\"");
+	}
+
+	/**
+	 * set the value of the element identified by key() to a float 
+	*/
+	void setFloat(float value) {
+		saveValue(to_string(value));
+	}
+
+	/**
+	 * set the value of the element identified by key() to null
+	*/
+	void setNull() {
+		saveValue("null");
 	}
 };
 
@@ -204,7 +228,6 @@ public:
 
 	/**
 	 * constructor - used when parsing a json string
-	 * @param input - string json input to be parsed
 	*/
 	easyJson(string input) {
 		cleanAndParse(input);
@@ -244,51 +267,13 @@ public:
 	// 	m_pElements.clear();
 	// }
 
-	/**
-	 * 
-	 * @param input - string json input to be parsed
-	*/
-	void cleanAndParse(string input) {
-		m_jsonString = input;
-		m_cleanString = input;
-		m_cleanString.erase(remove(m_cleanString.begin(), m_cleanString.end(), ' '), m_cleanString.end());
-		m_cleanString.erase(remove(m_cleanString.begin(), m_cleanString.end(), '\n'), m_cleanString.end());
-		parseJsonString(m_cleanString);
-	}
+	//----------------------------- DATA STRUCTURE METHODS ------------------------------//
 
 	/**
 	 * @brief used to identify if the json is just a singular primitive value, i.e. is just a string/bool/number
 	 */
 	bool isPrimitiveJson() {
 		return m_firstElement->m_valueType != Attribute::valueType::OBJECT && m_firstElement->m_valueType != Attribute::valueType::ARRAY;
-	}
-
-	/**
-	 * @param input {string} - remaining json text to be parsed
-	 * finds next special character in json string to denote start / end of current attribute
-	 * @return the next special character in the json string
-	*/
-	char findNextDelimiter(string input) {
-		for (char& character : input) {
-			switch (character) {
-				case ':':
-					return ':';
-				case ',':
-					return ',';
-				case '{':
-					return '{';
-				case '}':
-					return '}';
-				case '[':
-					return '[';
-				case ']':
-					return ']';
-				default:
-					continue;
-			}
-		}
-
-		return '0';
 	}
 
 	/**
@@ -335,6 +320,11 @@ public:
 	 */
 	void moveNextUp (Attribute* pCurrentAttribute) {
 		pCurrentAttribute->m_prevElement->m_nextElement = nullptr;
+		if (backToStart(pCurrentAttribute)) {
+			//we have already reached the end of the list - delete the new attribute
+			m_pElements.remove(pCurrentAttribute);
+			return;
+		}
 		pCurrentAttribute->m_parentElement->m_nextElement = pCurrentAttribute;
 		pCurrentAttribute->m_parentElement = pCurrentAttribute->m_parentElement->m_parentElement;
 	}
@@ -372,6 +362,48 @@ public:
 				break;
 			}
 		}
+	}
+
+	//----------------------------- DESERIALISATION METHODS ------------------------------//
+
+	/**
+	 * 
+	 * @param input - string json input to be parsed
+	*/
+	void cleanAndParse(string input) {
+		m_jsonString = input;
+		m_cleanString = input;
+		m_cleanString.erase(remove(m_cleanString.begin(), m_cleanString.end(), ' '), m_cleanString.end());
+		m_cleanString.erase(remove(m_cleanString.begin(), m_cleanString.end(), '\n'), m_cleanString.end());
+		parseJsonString(m_cleanString);
+	}
+
+	/**
+	 * @param input {string} - remaining json text to be parsed
+	 * finds next special character in json string to denote start / end of current attribute
+	 * @return the next special character in the json string
+	*/
+	char findNextDelimiter(string input) {
+		for (char& character : input) {
+			switch (character) {
+				case ':':
+					return ':';
+				case ',':
+					return ',';
+				case '{':
+					return '{';
+				case '}':
+					return '}';
+				case '[':
+					return '[';
+				case ']':
+					return ']';
+				default:
+					continue;
+			}
+		}
+
+		return '0';
 	}
 
 	/**
@@ -450,6 +482,7 @@ public:
 					} else {
 						pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
 						input.erase(0, pos+1);
+						if (backToStart(pAttribute)) break;
 						pAttribute = addLastChild(pAttribute);
 						exitingParent = true;
 					}
@@ -464,12 +497,10 @@ public:
 
 	//----------------------------- SERIALISATION METHODS ------------------------------//
 
-
 	//need to look at this - surely shouldn't be neccessary
 	string removeLeadingTrailing(string input) {
 		return input.substr(4, input.length()-4);
 	}
-
 
 	/**
 	 * Travereses backwards up the linked list when a layer end is reached to find the next element to append to the json string
@@ -611,9 +642,9 @@ public:
 	/**
 	 * @brief lookup element to be set by index - if not found add a new element at the specified index
 	 */
-	Attribute* findOrAddElement(int index) {
+	Attribute* findOrAddElement(Attribute* startingElement, int index) {
 		Attribute* pAttribute = m_firstElement->getChild();
-		if (m_queryElement) pAttribute = m_queryElement;
+		if (startingElement) pAttribute = startingElement->getChild();
 		int current = 0;
 		while(pAttribute) {
 			if (current == index) return pAttribute;
@@ -631,103 +662,70 @@ public:
 	}
 
 	/**
-	 * find by key the element which should be set in subsequent call to set() 
-	*/
-	Attribute* key (Attribute* startingElement, string key) {
-		Attribute* queryElement = findOrAddElement(startingElement, key);
-		if (!queryElement) throw invalid_argument("could not find or create this key");
-		return queryElement;
-	}
-
-	// /**
-	//  * find by key the element which should be set in subsequent call to set() 
-	// */
-	// easyJson& key (int index) {
-	// 	m_queryElement = findOrAddElement(index);
-	// 	if (!m_queryElement) throw invalid_argument("could not find or create this key");
-	// 	return *this;
-	// }
-
-	/**
-	 * set the value of the element identified by key() to a bool 
-	*/
-	void setBool(string value) {
-		if (value != "true" && value != "false" && value != "null") throw invalid_argument("this value cannot be interpreted as a bool");
-		m_queryElement->saveValue(value);
-		m_queryElement = nullptr;
-	}
-
-	/**
-	 * set the value of the element identified by key() to a string 
-	*/
-	void setString(string value) {
-		m_queryElement->saveValue("\"" + value + "\"");
-		m_queryElement = nullptr;
-	}
+	 * proxy class - intermediate class used to store pointer to queired attribute during key() > set()
+	 */
+	class Proxy
+	{
+	public:
+		easyJson& m_json;
+		Attribute* m_element = nullptr;
+		Proxy(easyJson& json) : m_json(json) {}
+		Proxy& key(string key) {
+			m_element = m_json.findOrAddElement(m_element, key);
+			if (!m_element) throw invalid_argument("could not find or create this key");
+			return *this;
+		}
+		Proxy& key(int index) {
+			m_element = m_json.findOrAddElement(m_element, index);
+			if (!m_element) throw invalid_argument("could not find or create this index");
+			return *this;
+		}
+		void setBool(bool value) {
+			m_element->setBool(value);
+		}		
+		void setString(string value) {
+			m_element->setString(value);
+		}
+		void setFloat(float value) {
+			m_element->setFloat(value);
+		}
+	};
 
 	/**
-	 * set the value of the element identified by key() to a float 
+	 * find by key the element which should be set in subsequent call to set()
+	 * returns a temporary proxy object which stores a pointer to the value to be set
 	*/
-	void setFloat(string value) {
-		if (!Attribute::isFloat(value)) throw invalid_argument("this value cannot be interpreted as a number");
-		m_queryElement->saveValue(value);
-		m_queryElement = nullptr;
+	Proxy key (string key) {
+		Proxy* pProxy = new Proxy(*this);
+		return pProxy->key(key);
 	}
 
-class Proxy
-{
-public:
-	easyJson& m_json;
-	string m_key;
-	Attribute* m_element = nullptr;
-	Proxy (easyJson& json, string key) : m_json(json), m_key(key) {
-		m_element = m_json.findOrAddElement(m_element, m_key);
+	/**
+	 * find by index the element which should be set in subsequent call to set()
+	 * returns a temporary proxy object which stores a pointer to the value to be set
+	*/
+	Proxy key(int index) {
+		Proxy* pProxy = new Proxy(*this);
+		return pProxy->key(index);
 	}
-	Proxy& operator[] (string key) {
-		m_key = key;
-		m_element = m_json.findOrAddElement(m_element, m_key);	//here it copies
-		return *this;
-	}
-	void operator= (string value) {
-		m_element->setString(value);
-	}
-	operator easyJson() {
-		//would need to check if m_element was added and if so delete it and return null (because we were assuming it was a set up until now)
-		return easyJson(m_element);
-		// return m_json.get(m_key);	//or maybe change get so it uses the attribute ptr looked up each time [] is called ?
-	}
-};
-
-
-
-	Proxy operator[] (string key) {
-		return Proxy(*this, key);
-	}
-
-	// Attribute operator[] (string key) {
-	// 	//maybe can get key to return Attribute& here? but that doesn't even solve if you want multiple keys before set
-	// }
-
 };
 
 
 
 int main() {
-
 string example = "{\"person\": {\"name\": \"charlie\", \"skills\": true, \"age\": 27}}";
 string arrayExample = "{\"name\": \"charlie\", \"skills\": [5, \"drawing\", false], \"drives\": \"yes\"}";
 string largeExample = "{ \"name\":\"charlie\", \"age\":24, \"parents\": { \"mother\": true, \"father\": { \"name\": \"steve\", \"age\": \"50\" }}, \"dob\": \"123456\"}";
 
-// //read json from file
-// ifstream stream("./json-examples/test.json");
-// easyJson fileJson(stream);
-// stream.close();
+//read json from file
+ifstream stream("./json-examples/test.json");
+easyJson fileJson(stream);
+stream.close();
 
-// //save json to file
-// ofstream ostream("./json-examples/test-out.json");
-// string output = fileJson.generateJsonString(); //maybe its weird to go via string but currently using strings in my algos so
-// ostream << output;
-// ostream.close();
+//save json to file
+ofstream ostream("./json-examples/test-out.json");
+ostream << fileJson.generateJsonString();
+ostream.close();
 
 //read json from string literal
 easyJson exampleJson(example);
@@ -736,78 +734,69 @@ easyJson exampleJson(example);
 cout << exampleJson.m_jsonString << endl;
 cout << exampleJson.generateJsonString() << endl;
 
-easyJson myPerson = exampleJson["person"];
+//get json object
+easyJson person = exampleJson.get("person");
 
-exampleJson["person"]["name"] = "bob";
+//serialise the new json
+cout << person.generateJsonString() << endl;
 
-exampleJson["person"]["name"] = "steve";
+//get string value from json
+string name;
+if (person.get("name").isString()) {
+	name = person.get("name").getString();
+}
 
-exampleJson["person"]["skills"] = "false";
+//get bool value from json
+bool skills;
+if (person.get("skills").isBool()) {
+	skills = person.get("skills").getBool();
+}
 
-cout << myPerson.generateJsonString() << endl;
+//get float value from json
+float age;
+if (person.get("age").isFloat()) {
+	age = person.get("age").getFloat();
+}
 
-// //get json object
-// easyJson person = exampleJson.get("person");
+//serialise the modified json
+cout << person.generateJsonString() << endl;
 
-// //serialise the new json
-// cout << person.generateJsonString() << endl;
+//set json value to string
+person.key("skills").setString("coding");
 
-// //get string value from json
-// string name;
-// if (person.get("name").isString()) {
-// 	name = person.get("name").getString();
-// }
+//set json value to bool
+person.key("skills").setBool(false);
 
-// //get bool value from json
-// bool skills;
-// if (person.get("skills").isBool()) {
-// 	skills = person.get("skills").getBool();
-// }
+//set json value to float
+person.key("age").setFloat(36.5);
 
-// //get float value from json
-// float age;
-// if (person.get("age").isFloat()) {
-// 	age = person.get("age").getFloat();
-// }
+//set new json value
+person.key("city").setString("london");
 
-// //set json value to string
-// person.key("skills").setString("coding");
+//serialise the modified json
+cout << person.generateJsonString() << endl;
 
-// //set json value to bool
-// person.key("skills").setBool("false");
+//read json with array from string literal
+easyJson individual(arrayExample);
 
-// //set json value to float
-// person.key("age").setFloat("36");
+//get json array
+easyJson my_skills = individual.get("skills");
 
-// //set new json value
-// person.key("city").setString("london");
+//serialise new json
+cout << my_skills.generateJsonString() << endl;
 
-// //serialise the modified json
-// cout << person.generateJsonString() << endl;
+//get string value from array
+string skill;
+if (my_skills.get(1).isString()) {
+	skill = my_skills.get(1).getString();
+}
 
-// //read json with array from string literal
-// easyJson individual(arrayExample);
+//set float value to array
+my_skills.key(2).setFloat(567);
 
-// //get json array
-// easyJson my_skills = individual.get("skills");
+//add a string to array (null values are added inbewteen)
+my_skills.key(6).setString("dancing");
 
-// //serialise new json
-// cout << my_skills.generateJsonString() << endl;
-
-// //get string value from array
-// string skill;
-// if (my_skills.get(1).isString()) {
-// 	skill = my_skills.get(1).getString();
-// }
-
-// //set float value to array
-// my_skills.key(2).setFloat("567");
-
-// //add a string to array (null values are added inbewteen)
-// my_skills.key(6).setString("dancing");
-
-// //serialise the modified json
-// cout << my_skills.generateJsonString() << endl;
-
-cout << "end" << endl;
+//serialise the modified json
+cout << my_skills.generateJsonString() << endl;
 }
