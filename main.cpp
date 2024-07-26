@@ -174,7 +174,16 @@ public:
 		testStream >> noskipws >> testFloat;
 		return testStream.eof() && !testStream.fail(); 
 	}
+
+	/**
+	 * set the value of the element identified by key() to a string 
+	*/
+	void setString(string value) {
+		saveValue("\"" + value + "\"");
+	}
 };
+
+
 
 /**
  * @class easyJson
@@ -583,9 +592,9 @@ public:
 	/**
 	 * @brief lookup element to be set by key - if not found add a new element
 	 */
-	Attribute* findOrAddElement(string key) {
+	Attribute* findOrAddElement(Attribute* startingElement, string key) {
 		Attribute* pAttribute = m_firstElement->getChild();
-		if (m_queryElement) pAttribute = m_queryElement;
+		if (startingElement) pAttribute = startingElement->getChild();
 		while(pAttribute) {
 			if (pAttribute->m_key == key) return pAttribute;
 			if (pAttribute->getNext()) {
@@ -624,20 +633,20 @@ public:
 	/**
 	 * find by key the element which should be set in subsequent call to set() 
 	*/
-	easyJson& key (string key) {
-		m_queryElement = findOrAddElement(key);
-		if (!m_queryElement) throw invalid_argument("could not find or create this key");
-		return *this;
+	Attribute* key (Attribute* startingElement, string key) {
+		Attribute* queryElement = findOrAddElement(startingElement, key);
+		if (!queryElement) throw invalid_argument("could not find or create this key");
+		return queryElement;
 	}
 
-	/**
-	 * find by key the element which should be set in subsequent call to set() 
-	*/
-	easyJson& key (int index) {
-		m_queryElement = findOrAddElement(index);
-		if (!m_queryElement) throw invalid_argument("could not find or create this key");
-		return *this;
-	}
+	// /**
+	//  * find by key the element which should be set in subsequent call to set() 
+	// */
+	// easyJson& key (int index) {
+	// 	m_queryElement = findOrAddElement(index);
+	// 	if (!m_queryElement) throw invalid_argument("could not find or create this key");
+	// 	return *this;
+	// }
 
 	/**
 	 * set the value of the element identified by key() to a bool 
@@ -665,7 +674,42 @@ public:
 		m_queryElement = nullptr;
 	}
 
+class Proxy
+{
+public:
+	easyJson& m_json;
+	string m_key;
+	Attribute* m_element = nullptr;
+	Proxy (easyJson& json, string key) : m_json(json), m_key(key) {
+		m_element = m_json.findOrAddElement(m_element, m_key);
+	}
+	Proxy& operator[] (string key) {
+		m_key = key;
+		m_element = m_json.findOrAddElement(m_element, m_key);	//here it copies
+		return *this;
+	}
+	void operator= (string value) {
+		m_element->setString(value);
+	}
+	operator easyJson() {
+		//would need to check if m_element was added and if so delete it and return null (because we were assuming it was a set up until now)
+		return easyJson(m_element);
+		// return m_json.get(m_key);	//or maybe change get so it uses the attribute ptr looked up each time [] is called ?
+	}
 };
+
+
+
+	Proxy operator[] (string key) {
+		return Proxy(*this, key);
+	}
+
+	// Attribute operator[] (string key) {
+	// 	//maybe can get key to return Attribute& here? but that doesn't even solve if you want multiple keys before set
+	// }
+
+};
+
 
 
 int main() {
@@ -692,68 +736,78 @@ easyJson exampleJson(example);
 cout << exampleJson.m_jsonString << endl;
 cout << exampleJson.generateJsonString() << endl;
 
-//get json object
-easyJson person = exampleJson.get("person");
+easyJson myPerson = exampleJson["person"];
 
-//serialise the new json
-cout << person.generateJsonString() << endl;
+exampleJson["person"]["name"] = "bob";
 
-//get string value from json
-string name;
-if (person.get("name").isString()) {
-	name = person.get("name").getString();
-}
+exampleJson["person"]["name"] = "steve";
 
-//get bool value from json
-bool skills;
-if (person.get("skills").isBool()) {
-	skills = person.get("skills").getBool();
-}
+exampleJson["person"]["skills"] = "false";
 
-//get float value from json
-float age;
-if (person.get("age").isFloat()) {
-	age = person.get("age").getFloat();
-}
+cout << myPerson.generateJsonString() << endl;
 
-//set json value to string
-person.key("skills").setString("coding");
+// //get json object
+// easyJson person = exampleJson.get("person");
 
-//set json value to bool
-person.key("skills").setBool("false");
+// //serialise the new json
+// cout << person.generateJsonString() << endl;
 
-//set json value to float
-person.key("age").setFloat("36");
+// //get string value from json
+// string name;
+// if (person.get("name").isString()) {
+// 	name = person.get("name").getString();
+// }
 
-//set new json value
-person.key("city").setString("london");
+// //get bool value from json
+// bool skills;
+// if (person.get("skills").isBool()) {
+// 	skills = person.get("skills").getBool();
+// }
 
-//serialise the modified json
-cout << person.generateJsonString() << endl;
+// //get float value from json
+// float age;
+// if (person.get("age").isFloat()) {
+// 	age = person.get("age").getFloat();
+// }
 
-//read json with array from string literal
-easyJson individual(arrayExample);
+// //set json value to string
+// person.key("skills").setString("coding");
 
-//get json array
-easyJson my_skills = individual.get("skills");
+// //set json value to bool
+// person.key("skills").setBool("false");
 
-//serialise new json
-cout << my_skills.generateJsonString() << endl;
+// //set json value to float
+// person.key("age").setFloat("36");
 
-//get string value from array
-string skill;
-if (my_skills.get(1).isString()) {
-	skill = my_skills.get(1).getString();
-}
+// //set new json value
+// person.key("city").setString("london");
 
-//set float value to array
-my_skills.key(2).setFloat("567");
+// //serialise the modified json
+// cout << person.generateJsonString() << endl;
 
-//add a string to array (null values are added inbewteen)
-my_skills.key(6).setString("dancing");
+// //read json with array from string literal
+// easyJson individual(arrayExample);
 
-//serialise the modified json
-cout << my_skills.generateJsonString() << endl;
+// //get json array
+// easyJson my_skills = individual.get("skills");
+
+// //serialise new json
+// cout << my_skills.generateJsonString() << endl;
+
+// //get string value from array
+// string skill;
+// if (my_skills.get(1).isString()) {
+// 	skill = my_skills.get(1).getString();
+// }
+
+// //set float value to array
+// my_skills.key(2).setFloat("567");
+
+// //add a string to array (null values are added inbewteen)
+// my_skills.key(6).setString("dancing");
+
+// //serialise the modified json
+// cout << my_skills.generateJsonString() << endl;
 
 cout << "end" << endl;
 }
