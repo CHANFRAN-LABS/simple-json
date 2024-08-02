@@ -7,7 +7,6 @@
 #include <iterator>
 #include <set>
 #include <list>
-#include <windows.h>
 using namespace std;
 /**
  * @class Attribute
@@ -223,7 +222,6 @@ public:
 	string m_jsonString;
 	string m_cleanString;
 	Attribute* m_firstElement;
-	Attribute* m_queryElement = nullptr;
 	list<Attribute*> m_pElements;
 
 	/**
@@ -241,6 +239,7 @@ public:
 		*m_firstElement = *(baseElement);
 		if (isPrimitiveJson()) {
 			m_firstElement->cleanOnlyElement();
+			m_pElements.push_back(m_firstElement);
 			m_jsonString = generateJsonString();
 		} else {
 			m_firstElement->cleanFirstElement();
@@ -258,14 +257,16 @@ public:
 		cleanAndParse(input);
 	}
 
-	// /**
-	//  * destructor - deletes all elements of the json object
-	//  */
-	// ~easyJson() {
-	// 	for (Attribute* element:m_pElements)
-	// 		delete element;
-	// 	m_pElements.clear();
-	// }
+	/**
+	 * destructor - deletes all elements of the json object
+	 */
+	~easyJson() {
+		for (Attribute* element:m_pElements)
+			delete element;
+		for (Proxy* proxy:m_pProxys)
+			delete proxy;
+		m_pElements.clear();
+	}
 
 	//----------------------------- DATA STRUCTURE METHODS ------------------------------//
 
@@ -323,6 +324,7 @@ public:
 		if (backToStart(pCurrentAttribute)) {
 			//we have already reached the end of the list - delete the new attribute
 			m_pElements.remove(pCurrentAttribute);
+			delete pCurrentAttribute;
 			return;
 		}
 		pCurrentAttribute->m_parentElement->m_nextElement = pCurrentAttribute;
@@ -572,23 +574,23 @@ public:
 
 	/**
 	 * query json object by key
+	 * return Attribute so that the object is constructed and assigned outside the object
 	*/
 	easyJson get (string key) {
 		Attribute* firstElement = getElement(key);
 		if (!firstElement) return NULL;
-		easyJson output(firstElement);
-		return output;
+		return firstElement;
 	}
 
 	/**
 	 * query json array by index
+	 * return Attribute so that the object is constructed and assigned outside the object
 	*/
 	easyJson get (int index) {
 		if (m_firstElement->m_valueType != Attribute::valueType::ARRAY) throw invalid_argument("element is not an array"); //maybe need same for get(key) but in both cases what should get() do if called on a primitive json. also should this return null ? or return itself?
 		Attribute* firstElement = getElement(index);
 		if (!firstElement) return NULL;
-		easyJson output(firstElement);
-		return output;
+		return firstElement;
 	}
 
 	bool isBool() {
@@ -691,12 +693,15 @@ public:
 		}
 	};
 
+	list<Proxy*> m_pProxys;
+
 	/**
 	 * find by key the element which should be set in subsequent call to set()
 	 * returns a temporary proxy object which stores a pointer to the value to be set
 	*/
 	Proxy key (string key) {
 		Proxy* pProxy = new Proxy(*this);
+		m_pProxys.push_back(pProxy);
 		return pProxy->key(key);
 	}
 
@@ -706,6 +711,7 @@ public:
 	*/
 	Proxy key(int index) {
 		Proxy* pProxy = new Proxy(*this);
+		m_pProxys.push_back(pProxy);
 		return pProxy->key(index);
 	}
 };
