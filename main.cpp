@@ -221,6 +221,8 @@ public:
 
 	string m_jsonString;
 	string m_cleanString;
+	string m_parseString;
+	bool m_exitingParent = false;
 	Attribute* m_firstElement;
 	list<Attribute*> m_pElements;
 
@@ -235,6 +237,7 @@ public:
 	 * constructor - used when copying an existing easyJson object to a new one
 	 */
 	easyJson (Attribute* baseElement) {
+		if (!baseElement) throw invalid_argument("tried to create a json object with NULL first element");
 		m_firstElement = new Attribute();
 		*m_firstElement = *(baseElement);
 		if (isPrimitiveJson()) {
@@ -408,86 +411,92 @@ public:
 		return '0';
 	}
 
+	void handleColon(Attribute* pAttribute) {
+		int pos = m_parseString.find_first_of(':');
+		pAttribute->saveKey(m_parseString.substr(1, pos-2));
+		m_parseString.erase(0, pos+1);
+	}
+
+	Attribute* handleComma(Attribute* pAttribute) {
+		int pos = m_parseString.find_first_of(',');
+		if (m_exitingParent) {
+			m_parseString.erase(0, pos+1);
+			m_exitingParent = false;
+			return pAttribute;
+		} else {
+			pAttribute->saveValue(m_parseString.substr(0, pos), pAttribute->EMPTY);
+			m_parseString.erase(0, pos+1);
+			return addAttribute(pAttribute);
+		}
+	}
+
+	Attribute* handleOpenBracket(Attribute* pAttribute, Attribute::valueType valueType) {
+		char delimiter = valueType == Attribute::OBJECT ? '{' : '[';
+		int pos = m_parseString.find_first_of(delimiter);
+		pAttribute->saveValue("", valueType);
+		m_parseString.erase(0, pos+1);
+		return addParent(pAttribute);
+	}
+
+	Attribute* handleCloseBracket(Attribute* pAttribute, Attribute::valueType valueType) {
+		char delimiter = valueType == Attribute::OBJECT ? '}' : ']';
+		int pos = m_parseString.find_first_of(delimiter);
+		if (m_exitingParent) {
+			moveNextUp(pAttribute);
+			m_parseString.erase(0, pos+1);
+			return pAttribute;
+		} else {
+			pAttribute->saveValue(m_parseString.substr(0, pos), Attribute::valueType::EMPTY);
+			m_parseString.erase(0, pos+1);
+			if (backToStart(pAttribute)) return pAttribute;
+			m_exitingParent = true;
+			return addLastChild(pAttribute);
+		}
+	}
+
 	/**
 	 * parse json string, searching for special characters and generating attributes to represent the string as a json object
 	 * attribute IDs are used to link parents to children
 	*/
 	void parseJsonString(string input) {
-		bool exitingParent = false;
-		size_t pos;
+		m_parseString = input;
+		m_exitingParent = false;
 		char delimiter;
 
 		Attribute* pAttribute = new Attribute;
 		m_firstElement = pAttribute;
 		m_pElements.push_back(pAttribute);
 
-		while (input != "") {
-			delimiter = findNextDelimiter(input);
-
+		while (m_parseString != "") {
+			delimiter = findNextDelimiter(m_parseString);
 			switch (delimiter) {
 				case ':':
-					pos = input.find_first_of(':');				//put these in functions?
-					pAttribute->saveKey(input.substr(1, pos-2));	//strip out "" for keys
-					input.erase(0, pos+1);
+					handleColon(pAttribute);
 					break;
-				
+
 				case ',':
-					pos = input.find_first_of(',');
-					if (exitingParent) {
-						input.erase(0, pos+1);
-						exitingParent = false;
-					} else {
-						pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
-						input.erase(0, pos+1);
-						pAttribute = addAttribute(pAttribute);
-					}
+					pAttribute = handleComma(pAttribute);
 					break;
 
 				case '{':
-					pos = input.find_first_of('{');
-					pAttribute->saveValue("", pAttribute->OBJECT);
-					input.erase(0, pos+1);
-					pAttribute = addParent(pAttribute);
+					pAttribute = handleOpenBracket(pAttribute, Attribute::valueType::OBJECT);
 					break;
 				
 				case '}':
 				{
-					pos = input.find_first_of('}');
-					if (exitingParent) {
-						moveNextUp(pAttribute);
-						input.erase(0, pos+1);
-					} else {
-						pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
-						input.erase(0, pos+1);
-						if (backToStart(pAttribute)) break;
-						pAttribute = addLastChild(pAttribute);
-						exitingParent = true;
-					}
+					pAttribute = handleCloseBracket(pAttribute, Attribute::valueType::OBJECT);
 					break;
 				}
 
 				case '[':
 				{
-					pos = input.find_first_of('[');
-					pAttribute->saveValue("", pAttribute->ARRAY);
-					input.erase(0, pos+1);
-					pAttribute = addParent(pAttribute);
+					pAttribute = handleOpenBracket(pAttribute, Attribute::valueType::ARRAY);
 					break;
 				}
 
 				case ']':
 				{
-					pos = input.find_first_of(']');
-					if (exitingParent) {
-						moveNextUp(pAttribute);
-						input.erase(0, pos+1);
-					} else {
-						pAttribute->saveValue(input.substr(0, pos), pAttribute->EMPTY);
-						input.erase(0, pos+1);
-						if (backToStart(pAttribute)) break;
-						pAttribute = addLastChild(pAttribute);
-						exitingParent = true;
-					}
+					pAttribute = handleCloseBracket(pAttribute, Attribute::valueType::ARRAY);
 					break;
 				}
 
@@ -577,6 +586,7 @@ public:
 	 * return Attribute so that the object is constructed and assigned outside the object
 	*/
 	easyJson get (string key) {
+		if (m_firstElement->m_valueType == Attribute::valueType::ARRAY) throw invalid_argument("cannot get an array by key");
 		Attribute* firstElement = getElement(key);
 		if (!firstElement) return NULL;
 		return firstElement;
@@ -587,7 +597,7 @@ public:
 	 * return Attribute so that the object is constructed and assigned outside the object
 	*/
 	easyJson get (int index) {
-		if (m_firstElement->m_valueType != Attribute::valueType::ARRAY) throw invalid_argument("element is not an array"); //maybe need same for get(key) but in both cases what should get() do if called on a primitive json. also should this return null ? or return itself?
+		if (m_firstElement->m_valueType == Attribute::valueType::OBJECT) throw invalid_argument("cannot get an object by index");
 		Attribute* firstElement = getElement(index);
 		if (!firstElement) return NULL;
 		return firstElement;
@@ -805,4 +815,5 @@ my_skills.key(6).setString("dancing");
 
 //serialise the modified json
 cout << my_skills.generateJsonString() << endl;
+
 }
