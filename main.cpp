@@ -10,7 +10,8 @@
 using namespace std;
 /**
  * @class Element
- * store invididual Elements of the json object, plus information about their parent Elements, and metadata
+ * Data structure for storing individual elements of the json object
+ * Multi-layer linked list node structure
 */
 class Element {
 public:
@@ -26,82 +27,93 @@ public:
 	};
 
 	/**
-	 * @fn Element() 
-	 * constructor for Element class
-	 * 
+	 * @brief constructor for Element class - initialise member variables
 	*/
 	Element() {
 		string m_key = "";
 		string m_value = "";
 		int m_valueType = EMPTY;
-		Element* m_nextElement = nullptr;
-		Element* m_parentElement = nullptr;
-		Element* m_childElement = nullptr;
-		Element* m_prevElement = nullptr;
+		Element* m_pNextElement = nullptr;
+		Element* m_pParentElement = nullptr;
+		Element* m_pChildElement = nullptr;
+		Element* m_pPrevElement = nullptr;
 	}
 
 	string m_key;
 	string m_value;
 	int m_valueType = EMPTY;
-	Element* m_nextElement = nullptr;
-	Element* m_parentElement = nullptr;
-	Element* m_childElement = nullptr;
-	Element* m_prevElement = nullptr;
+	Element* m_pNextElement = nullptr;
+	Element* m_pParentElement = nullptr;
+	Element* m_pChildElement = nullptr;
+	Element* m_pPrevElement = nullptr;
 
+	/**
+	 * @brief return the next element
+	 */
 	Element* getNext() {
-		return m_nextElement;
-	}
-
-	Element* getParent() {
-		return m_parentElement;
-	}
-
-	Element* getChild() {
-		return m_childElement;
-	}
-
-	void copyChild() {
-		Element* newElement = new Element;
-		*newElement = *m_childElement;
-		m_childElement = newElement;
-		m_childElement->m_parentElement = this;
-	}
-
-	void copyNext() {
-		Element* newElement = new Element;
-		*newElement = *m_nextElement;
-		m_nextElement = newElement;
-		m_nextElement->m_parentElement = m_parentElement;
+		return m_pNextElement;
 	}
 
 	/**
-	 * when get() is called on a parent element we need to create a copy of the relevant branch of the original json object
+	 * @brief return the parent element
+	 */
+	Element* getParent() {
+		return m_pParentElement;
+	}
+
+	/**
+	 * @brief return the child element
+	 */
+	Element* getChild() {
+		return m_pChildElement;
+	}
+
+	/**
+	 * @brief copy child element to new pointer
+	 */
+	void copyChild() {
+		Element* pNewElement = new Element;
+		*pNewElement = *m_pChildElement;
+		m_pChildElement = pNewElement;
+		m_pChildElement->m_pParentElement = this;
+	}
+
+	/**
+	 * @brief copy next element to new pointer
+	 */
+	void copyNext() {
+		Element* pNewElement = new Element;
+		*pNewElement = *m_pNextElement;
+		m_pNextElement = pNewElement;
+		m_pNextElement->m_pParentElement = m_pParentElement;
+	}
+
+	/**
+	 * @brief when get() is called on a parent element we need to create a copy of the relevant branch of the original json object
 	 * this function cleans the values of the old parent element so that it acts as the new base element
 	 */
 	void cleanFirstElement() {
 		m_key = "";
 		m_value = "";
-		m_nextElement = nullptr;	//set next element to empty Element to mark the end of the linked list
-		m_parentElement = nullptr;
+		m_pNextElement = nullptr;	//set next element to null to mark the end of the new element tree
+		m_pParentElement = nullptr;
 	}
 
 	/**
-	 * when get() is called on a primitive element (i.e. not object or array) we need to remove the key and all connected elements
+	 * @brief when get() is called on a primitive element (i.e. not object or array) we need to remove the key and all connected elements
 	 */
 	void cleanOnlyElement() {
 		m_key = "";
-		m_nextElement = nullptr;
-		m_parentElement = nullptr;
-		m_childElement = nullptr;
-		m_prevElement = nullptr;
+		m_pNextElement = nullptr;
+		m_pParentElement = nullptr;
+		m_pChildElement = nullptr;
+		m_pPrevElement = nullptr;
 	}
 
 	/**
-	 * @fn saveValue()
-	 * @param value the value to be saved
-	 * @param type optional param for type of value being saved from enum valueType
+	 * @brief set the value and valueType of the element. In some cases we need to specify the valueType, in others we infer it from the value itself
 	*/
-	void saveValue(string value, int type=UNKNOWN) {
+	void setValue(string value, int type=UNKNOWN) {
 		//need to check for non empty string plus UNknown (do I mean empty string plus unknown ?)
 		m_value = value;
 		if (value == "") {
@@ -117,15 +129,14 @@ public:
 			m_valueType = NUMBER;
 		} else {
 			throw invalid_argument("invalid json value");
-			//value is not a valid json value
 		}
 	}
 
 	/**
-	 * what is this for?
+	 * @brief get the key from an element to append to json string during serialization
 	 */
 	string getKey() {
-		switch (m_parentElement->m_valueType) {
+		switch (m_pParentElement->m_valueType) {
 			case ARRAY:
 				return "";
 			case OBJECT:
@@ -136,11 +147,17 @@ public:
 		}
 	}
 
+	/**
+	 * @brief get the value from an element - if valueType is string need to add ""
+	 */
 	string getValue() {
 		if (m_valueType == STRING) return "\"" + m_value + "\"";
 		return m_value;
 	}
 
+	/**
+	 * @brief return a string containing the open bracket correpsonding to a parent element's value type
+	 */
 	string getOpenBracket() {
 		switch (m_valueType) {
 			case OBJECT:
@@ -153,6 +170,9 @@ public:
 		}
 	}
 
+	/**
+	 * @brief return a string contianing the closing bracket correpsonding to a parent element's value type
+	 */
 	string getCloseBracket() {
 		switch (m_valueType) {
 			case OBJECT:
@@ -165,10 +185,16 @@ public:
 		}
 	}
 
-	void saveKey(string key) {
+	/**
+	 * @brief set the key for an element
+	 */
+	void setKey(string key) {
 		m_key = key;
 	}
 
+	/**
+	 * @brief check if a given string can be treated as a number when saving elements value
+	 */
 	static bool isFloat( string value ) {
 		istringstream testStream(value);
 		float testFloat;
@@ -177,93 +203,91 @@ public:
 	}
 
 	/**
-	 * set the value of the element identified by key() to a bool 
+	 * @brief set the value of the element identified by key() to a bool 
 	*/
 	void setBool(bool value) {
 		string strValue = value ? "true" : "false";
-		saveValue(strValue);
+		setValue(strValue);
 	}
 
 	/**
-	 * set the value of the element identified by key() to a string 
+	 * @brief set the value of the element identified by key() to a string 
 	*/
 	void setString(string value) {
-		saveValue("\"" + value + "\"");
+		setValue("\"" + value + "\"");
 	}
 
 	/**
-	 * set the value of the element identified by key() to a float 
+	 * @brief set the value of the element identified by key() to a float 
 	*/
 	void setFloat(float value) {
-		saveValue(to_string(value));
+		setValue(to_string(value));
 	}
 
 	/**
-	 * set the value of the element identified by key() to null
+	 * @brief set the value of the element identified by key() to null
 	*/
 	void setNull() {
-		saveValue("null");
+		setValue("null");
 	}
 };
 
 
 
 /**
- * @class easyJson
- * Master class for handling json objects. 
- * Stores json object as a vector of Elements
- * Parses json text and stores resulting json object as a vector of Elements
- * Allows value access via [] operator
- * plus more tbc
+ * @class SimpleJson
+ * DOM style json object which stores json as a multi-layer linked list/tree of Elements
+ * Contains serialization, deserialization, setting and getting methods
 */
-class easyJson {
+class SimpleJson {
 public:
 
 	string m_jsonString;
 	string m_cleanString;
 	string m_parseString;
 	bool m_exitingParent = false;
-	Element* m_firstElement;
+	Element* m_pFirstElement;
 	list<Element*> m_pElements;
 
 	/**
-	 * constructor - used when parsing a json string
+	 * @brief constructor - deserialize a json string
 	*/
-	easyJson(string input) {
+	SimpleJson(string input) {
 		cleanAndParse(input);
 	}
 
 	/**
-	 * constructor - used when copying an existing easyJson object to a new one
+	 * @brief constructor - deserialize a json file
+	 * @param stream - std::ifstream of file to be parsed
+	*/
+	SimpleJson(ifstream &stream) {
+		string input((istreambuf_iterator<char>(stream)), istreambuf_iterator<char>());
+		cleanAndParse(input);
+	}
+
+
+	/**
+	 * @brief constructor - create a new SimpleJson object from an existing one
 	 */
-	easyJson (Element* baseElement) {
+	SimpleJson (Element* baseElement) {
 		if (!baseElement) throw invalid_argument("tried to create a json object with NULL first element");
-		m_firstElement = new Element();
-		*m_firstElement = *(baseElement);
+		m_pFirstElement = new Element();
+		*m_pFirstElement = *(baseElement);
 		if (isPrimitiveJson()) {
-			m_firstElement->cleanOnlyElement();
-			m_pElements.push_back(m_firstElement);
+			m_pFirstElement->cleanOnlyElement();
+			m_pElements.push_back(m_pFirstElement);
 			m_jsonString = generateJsonString();
 		} else {
-			m_firstElement->cleanFirstElement();
-			walkAndCopy();
+			m_pFirstElement->cleanFirstElement();
+			copyElementTree();
 			m_jsonString = generateJsonString();
 		}
 	}
 
 	/**
-	 * constructor - used when parsing a json file
-	 * @param stream - std::ifstream of file to be parsed
-	*/
-	easyJson(ifstream &stream) {
-		string input((istreambuf_iterator<char>(stream)), istreambuf_iterator<char>());
-		cleanAndParse(input);
-	}
-
-	/**
-	 * destructor - deletes all elements of the json object
+	 * @brief destructor - delete all elements of the json object
 	 */
-	~easyJson() {
+	~SimpleJson() {
 		for (Element* element:m_pElements)
 			delete element;
 		for (Proxy* proxy:m_pProxys)
@@ -274,71 +298,72 @@ public:
 	//----------------------------- DATA STRUCTURE METHODS ------------------------------//
 
 	/**
-	 * @brief used to identify if the json is just a singular primitive value, i.e. is just a string/bool/number
+	 * @brief check if the json is just a singular primitive value, i.e. is just a string/bool/number
 	 */
 	bool isPrimitiveJson() {
-		return m_firstElement->m_valueType != Element::valueType::OBJECT && m_firstElement->m_valueType != Element::valueType::ARRAY;
+		return m_pFirstElement->m_valueType != Element::valueType::OBJECT && m_pFirstElement->m_valueType != Element::valueType::ARRAY;
 	}
 
 	/**
-	 * @param Element {Element} - the Element to be saved into the Element vector
-	 * this func saves the current Element into the Element vector then returns a blank Element
-	 * @return a blank new Element to be used for the next step in the json parse
-	 * 
+	 * @brief save the current Element into the element tree and create a new element to be populated on the same branch
 	*/
 	Element* addElement (Element* pCurrentElement) {
 		Element* pNewElement = new Element();
-		pCurrentElement->m_nextElement = pNewElement;
-		pNewElement->m_parentElement = pCurrentElement->m_parentElement;
+		pCurrentElement->m_pNextElement = pNewElement;
+		pNewElement->m_pParentElement = pCurrentElement->m_pParentElement;
 		m_pElements.push_back(pNewElement);
 		return pNewElement;
-	}
-
-	Element* addParent (Element* pCurrentElement) {
-		Element* pNewElement = new Element();
-		pCurrentElement->m_childElement = pNewElement;
-		pNewElement->m_parentElement = pCurrentElement;
-		m_pElements.push_back(pNewElement);
-		return pNewElement;
-	}
-
-	Element* addLastChild (Element* pCurrentElement) {
-		Element* pNewElement = new Element();
-		pNewElement->m_parentElement = pCurrentElement->m_parentElement->m_parentElement;
-		pNewElement->m_prevElement = pCurrentElement->m_parentElement;
-		pCurrentElement->m_parentElement->m_nextElement = pNewElement;
-		m_pElements.push_back(pNewElement);
-		return pNewElement;
-		//instead of the conditionals in , } ] cases for parse, we could use addLastChild a bit like findNextElement for the generate, where it looks for }] and basically does move next up each time, until it hits comma
 	}
 
 	/**
-	 * @brief checks if we have returned to the first element, at which point we have finished parsing the string
+	 * @brief save the current Element to the element tree and create a new child element to be populated on a new branch
+	 */
+	Element* addChild (Element* pCurrentElement) {
+		Element* pNewElement = new Element();
+		pCurrentElement->m_pChildElement = pNewElement;
+		pNewElement->m_pParentElement = pCurrentElement;
+		m_pElements.push_back(pNewElement);
+		return pNewElement;
+	}
+
+	/**
+	 * @brief save the current Element to the element tree and close off a branch, then create a new element to be populated on the parent branch
+	 */
+	Element* addLastChild (Element* pCurrentElement) {
+		Element* pNewElement = new Element();
+		pNewElement->m_pParentElement = pCurrentElement->m_pParentElement->m_pParentElement;
+		pNewElement->m_pPrevElement = pCurrentElement->m_pParentElement;
+		pCurrentElement->m_pParentElement->m_pNextElement = pNewElement;
+		m_pElements.push_back(pNewElement);
+		return pNewElement;
+	}
+
+	/**
+	 * @brief check if we have returned to the first element, at which point we have finished parsing the string
 	 */
 	bool backToStart(Element* pCurrentElement) {
-		return pCurrentElement->getParent() == m_firstElement;
+		return pCurrentElement->getParent() == m_pFirstElement;
 	}
 
 	/**
 	 * @brief If exiting more than one parent in a row in generateJsonString, we need to move the element we created up to the next parent
 	 */
 	void moveNextUp (Element* pCurrentElement) {
-		pCurrentElement->m_prevElement->m_nextElement = nullptr;
+		pCurrentElement->m_pPrevElement->m_pNextElement = nullptr;
 		if (backToStart(pCurrentElement)) {
-			//we have already reached the end of the list - delete the new element
+			//we have reached the end of the list - delete the new element
 			m_pElements.remove(pCurrentElement);
 			delete pCurrentElement;
 			return;
 		}
-		pCurrentElement->m_parentElement->m_nextElement = pCurrentElement;
-		pCurrentElement->m_parentElement = pCurrentElement->m_parentElement->m_parentElement;
+		pCurrentElement->m_pParentElement->m_pNextElement = pCurrentElement;
+		pCurrentElement->m_pParentElement = pCurrentElement->m_pParentElement->m_pParentElement;
 	}
 
 	/**
-	 * Travereses backwards up the linked list when a layer end is reached to find the next element to append to the json string
-	 * Adds a closing bracket each time because each layer represents another parent closed
+	 * @brief when a branch ends, traverese backwards up the tree to find the next element to copy
 	 */
-	Element* walkBackwards(Element* pElement) {
+	Element* exitBranch(Element* pElement) {
 		while (pElement) {
 			pElement = pElement->getParent();
 			if (!pElement) return nullptr;	//end of list reached
@@ -349,8 +374,11 @@ public:
 		return nullptr;
 	}
 
-	void walkAndCopy() {
-		Element* pElement = m_firstElement;
+	/**
+	 * @brief create a copy of the element tree starting from a given first element
+	 */
+	void copyElementTree() {
+		Element* pElement = m_pFirstElement;
 		while(pElement) {
 			if (pElement->getChild()) {
 				pElement->copyChild();
@@ -362,7 +390,7 @@ public:
 				pElement = pElement->getNext();
 			} else if (pElement->getParent()) {
 				m_pElements.push_back(pElement);
-				pElement = walkBackwards(pElement);
+				pElement = exitBranch(pElement);
 			} else {
 				break;
 			}
@@ -373,7 +401,7 @@ public:
 
 	/**
 	 * 
-	 * @param input - string json input to be parsed
+	 * @brief clean the input json string then deserialize it to build the element tree
 	*/
 	void cleanAndParse(string input) {
 		m_jsonString = input;
@@ -384,9 +412,7 @@ public:
 	}
 
 	/**
-	 * @param input {string} - remaining json text to be parsed
-	 * finds next special character in json string to denote start / end of current element
-	 * @return the next special character in the json string
+	 * @brief find the next special character in json string
 	*/
 	char findNextDelimiter(string input) {
 		for (char& character : input) {
@@ -411,12 +437,19 @@ public:
 		throw invalid_argument("string is not a valid json");
 	}
 
+	/**
+	 * @brief consume next colon to get the current element's key
+	 */
 	void handleColon(Element* pElement) {
 		int pos = m_parseString.find_first_of(':');
-		pElement->saveKey(m_parseString.substr(1, pos-2));
+		pElement->setKey(m_parseString.substr(1, pos-2));
 		m_parseString.erase(0, pos+1);
 	}
 
+	/**
+	 * @brief consume next comma to get the current elements value
+	 * special case where the previous special char was a close bracket, in which case there is no value to populate
+	 */
 	Element* handleComma(Element* pElement) {
 		int pos = m_parseString.find_first_of(',');
 		if (m_exitingParent) {
@@ -424,20 +457,27 @@ public:
 			m_exitingParent = false;
 			return pElement;
 		} else {
-			pElement->saveValue(m_parseString.substr(0, pos), pElement->EMPTY);
+			pElement->setValue(m_parseString.substr(0, pos), pElement->EMPTY);
 			m_parseString.erase(0, pos+1);
 			return addElement(pElement);
 		}
 	}
 
+	/**
+	 * @brief consume next open bracket to create a new branch of the element tree
+	 */
 	Element* handleOpenBracket(Element* pElement, Element::valueType valueType) {
 		char delimiter = valueType == Element::OBJECT ? '{' : '[';
 		int pos = m_parseString.find_first_of(delimiter);
-		pElement->saveValue("", valueType);
+		pElement->setValue("", valueType);
 		m_parseString.erase(0, pos+1);
-		return addParent(pElement);
+		return addChild(pElement);
 	}
 
+	/**
+	 * @brief consume next close bracket to set the value of the current element and close off the current branch of the element tree
+	 * special case if prev special char was a close bracket, in this case we move the new element up a layer
+	 */
 	Element* handleCloseBracket(Element* pElement, Element::valueType valueType) {
 		char delimiter = valueType == Element::OBJECT ? '}' : ']';
 		int pos = m_parseString.find_first_of(delimiter);
@@ -446,7 +486,7 @@ public:
 			m_parseString.erase(0, pos+1);
 			return pElement;
 		} else {
-			pElement->saveValue(m_parseString.substr(0, pos), Element::valueType::EMPTY);
+			pElement->setValue(m_parseString.substr(0, pos), Element::valueType::EMPTY);
 			m_parseString.erase(0, pos+1);
 			if (backToStart(pElement)) return pElement;
 			m_exitingParent = true;
@@ -455,8 +495,7 @@ public:
 	}
 
 	/**
-	 * parse json string, searching for special characters and generating elements to represent the string as a json object
-	 * element IDs are used to link parents to children
+	 * @brief deserialize a json string to create its representation as an element tree
 	*/
 	void parseJsonString(string input) {
 		m_parseString = input;
@@ -464,7 +503,7 @@ public:
 		char delimiter;
 
 		Element* pElement = new Element;
-		m_firstElement = pElement;
+		m_pFirstElement = pElement;
 		m_pElements.push_back(pElement);
 
 		while (m_parseString != "") {
@@ -508,16 +547,19 @@ public:
 
 	//----------------------------- SERIALISATION METHODS ------------------------------//
 
-	//need to look at this - surely shouldn't be neccessary
+	/**
+	 * @brief remove unwanted leading/trailing characters from output of serializing element tree
+	 * taking this manual step at the end allows the main algorithm to be clean and simple
+	 */
 	string removeLeadingTrailing(string input) {
 		return input.substr(4, input.length()-4);
 	}
 
 	/**
-	 * Travereses backwards up the linked list when a layer end is reached to find the next element to append to the json string
-	 * Adds a closing bracket each time because each layer represents another parent closed
+	 * @brief when a branch ends, traverese backwards up the tree to find the next element to serialize, appending a closing bracket each time
+	 * this method is neccessary to handle multiple closing brackets in a row
 	 */
-	Element* findNextElement(Element* pElement, string &output) {
+	Element* exitBranchAppend(Element* pElement, string &output) {
 		while (pElement) {
 			pElement = pElement->getParent();
 			if (!pElement) return nullptr;	//reached end of list
@@ -531,13 +573,13 @@ public:
 	}
 
 	/**
-	 * @brief generate string representation of the json elements - ready to be saved to file
+	 * @brief serialize the element tree to output a json string
 	 */
 	string generateJsonString () {
 		string output;
-		Element* pElement = m_firstElement;
+		Element* pElement = m_pFirstElement;
 		if (isPrimitiveJson()) {
-			return m_firstElement->getValue();
+			return m_pFirstElement->getValue();
 		}
 		bool exitingParent = false;
 		while(pElement) {
@@ -550,7 +592,7 @@ public:
 				pElement = currentElement.getNext();
 			} else if (currentElement.getParent()) {
 				output.append(currentElement.getKey() + currentElement.getValue() + " ");
-				pElement = findNextElement(pElement, output);
+				pElement = exitBranchAppend(pElement, output);
 			} else {
 				break;
 			}
@@ -561,8 +603,11 @@ public:
 
 	//----------------------------- GET METHODS ------------------------------//
 
+	/**
+	 * @brief search the top layer of the element tree for a given key then return that element
+	 */
 	Element* getElement(string key) {
-		Element* pElement = m_firstElement->m_childElement;
+		Element* pElement = m_pFirstElement->m_pChildElement;
 		while(pElement) {
 			if (pElement->m_key == key) return pElement;
 			pElement = pElement->getNext();
@@ -570,8 +615,11 @@ public:
 		return nullptr;
 	}
 
+	/**
+	 * @brief return the element at a given index in the top layer of the element tree
+	 */
 	Element* getElement(int index) {
-		Element* pElement = m_firstElement->m_childElement;
+		Element* pElement = m_pFirstElement->m_pChildElement;
 		int current = 0;
 		while(pElement) {
 			if (current == index) return pElement;
@@ -582,61 +630,80 @@ public:
 	}
 
 	/**
-	 * query json object by key
-	 * return Element so that the object is constructed and assigned outside the object
+	 * @brief get json value by key. Search the top layer then implicitly construct a new SimpleJson with the found element as its first element
+	 * implicit construction is needed as otherwise we would create a SimpleJson in this scope then copy it, resulting in dangling ptrs
 	*/
-	easyJson get (string key) {
-		if (m_firstElement->m_valueType == Element::valueType::ARRAY) throw invalid_argument("cannot get an array by key");
+	SimpleJson get (string key) {
+		if (m_pFirstElement->m_valueType == Element::valueType::ARRAY) throw invalid_argument("cannot get an array by key");
 		Element* firstElement = getElement(key);
 		if (!firstElement) return NULL;
 		return firstElement;
 	}
 
 	/**
-	 * query json array by index
-	 * return Element so that the object is constructed and assigned outside the object
+	 * @brief get json value by index. Search the top layer then implicitly construct a new SimpleJson with the found element as its first element
+	 * implicit construction is needed as otherwise we would create a SimpleJson in this scope then copy it, resulting in dangling ptrs
 	*/
-	easyJson get (int index) {
-		if (m_firstElement->m_valueType == Element::valueType::OBJECT) throw invalid_argument("cannot get an object by index");
+	SimpleJson get (int index) {
+		if (m_pFirstElement->m_valueType == Element::valueType::OBJECT) throw invalid_argument("cannot get an object by index");
 		Element* firstElement = getElement(index);
 		if (!firstElement) return NULL;
 		return firstElement;
 	}
 
+	/**
+	 * @brief check if the SimpleJson object is a bool
+	 */
 	bool isBool() {
-		return m_firstElement->m_valueType == Element::valueType::BOOL;
+		return m_pFirstElement->m_valueType == Element::valueType::BOOL;
 	}
 
+	/**
+	 * @brief return the value from a SimpleJson that contains just one element of type bool
+	 */
 	bool getBool() {
-		if(m_firstElement->m_valueType != Element::valueType::BOOL) throw invalid_argument("element is not a bool");
-		return m_firstElement->m_value == "true";
+		if(m_pFirstElement->m_valueType != Element::valueType::BOOL) throw invalid_argument("element is not a bool");
+		return m_pFirstElement->m_value == "true";
 	}
 
+	/**
+	 * @brief check if the SimpleJson object is a string
+	 */
 	bool isString() {
-		return m_firstElement->m_valueType == Element::valueType::STRING;
+		return m_pFirstElement->m_valueType == Element::valueType::STRING;
 	}
 
+	/**
+	 * @brief return the value from a SimpleJson that contains just one element of type string
+	 */
 	string getString() {
-		if(m_firstElement->m_valueType != Element::valueType::STRING) throw invalid_argument("element is not a string");
-		return m_firstElement->getValue();
+		if(m_pFirstElement->m_valueType != Element::valueType::STRING) throw invalid_argument("element is not a string");
+		return m_pFirstElement->getValue();
 	}
 
+	/**
+	 * @brief check if the SimpleJson object is a number
+	 */
 	bool isFloat() {
-		return m_firstElement->m_valueType == Element::valueType::NUMBER;
+		return m_pFirstElement->m_valueType == Element::valueType::NUMBER;
 	}
 
+	/**
+	 * @brief return the value from a SimpleJson that contains just one element of type number
+	 */
 	float getFloat() {
-		if(m_firstElement->m_valueType != Element::valueType::NUMBER) throw invalid_argument("element is not a number");
-		return stof(m_firstElement->getValue());
+		if(m_pFirstElement->m_valueType != Element::valueType::NUMBER) throw invalid_argument("element is not a number");
+		return stof(m_pFirstElement->getValue());
 	}
 
 	//----------------------------- SET METHODS ------------------------------//
 
 	/**
-	 * @brief lookup element to be set by key - if not found add a new element
+	 * @brief lookup the element to be set specified by its key - if not found add a new element
+	 * The branch to be searched is determined by the starting element passed in. This is needed so the user can set values more than one layer deep in the tree
 	 */
 	Element* findOrAddElement(Element* startingElement, string key) {
-		Element* pElement = m_firstElement->getChild();
+		Element* pElement = m_pFirstElement->getChild();
 		if (startingElement) pElement = startingElement->getChild();
 		while(pElement) {
 			if (pElement->m_key == key) return pElement;
@@ -644,7 +711,7 @@ public:
 				pElement = pElement->getNext();
 			} else {
 				pElement = addElement(pElement);
-				pElement->saveKey(key);
+				pElement->setKey(key);
 				return pElement;
 			}
 		}
@@ -652,10 +719,11 @@ public:
 	}
 
 	/**
-	 * @brief lookup element to be set by index - if not found add a new element at the specified index
+	 * @brief lookup the element to be set specified by its index - if not found add null elements until the index is reached
+	 * The branch to be searched is determined by the starting element passed in. This is needed so the user can set values more than one layer deep in the tree
 	 */
 	Element* findOrAddElement(Element* startingElement, int index) {
-		Element* pElement = m_firstElement->getChild();
+		Element* pElement = m_pFirstElement->getChild();
 		if (startingElement) pElement = startingElement->getChild();
 		int current = 0;
 		while(pElement) {
@@ -666,7 +734,7 @@ public:
 				if (current == index) return addElement(pElement);
 				//add empty elements until we reach the specified index
 				pElement = addElement(pElement);
-				pElement->saveValue("null");
+				pElement->setValue("null");
 			}
 			current++;
 		}
@@ -674,30 +742,54 @@ public:
 	}
 
 	/**
-	 * proxy class - intermediate class used to store pointer to queired element during key() > set()
+	 * @class Proxy
+	 * temporary object used to store a pointer to the element reutrned from each call to key()
+	 * this is needed so that key() can be called multiple times in a row to set a value more than 1 layer deep in the tree
+	 * it is temporary so that preivious calls to key().set() do not effect later calls
 	 */
 	class Proxy
 	{
 	public:
-		easyJson& m_json;
+		SimpleJson& m_json;
 		Element* m_element = nullptr;
-		Proxy(easyJson& json) : m_json(json) {}
+		
+		Proxy(SimpleJson& json) : m_json(json) {}
+
+		/**
+		 * @brief search from the starting element for an element with a given key
+		 */
 		Proxy& key(string key) {
 			m_element = m_json.findOrAddElement(m_element, key);
 			if (!m_element) throw invalid_argument("could not find or create this key");
 			return *this;
 		}
+
+		/**
+		 * @brief search from the starting element for an element with a given index
+		 */
 		Proxy& key(int index) {
 			m_element = m_json.findOrAddElement(m_element, index);
 			if (!m_element) throw invalid_argument("could not find or create this index");
 			return *this;
 		}
+
+		/**
+		 * @brief expose Element::setBool so it can be called straight after a call to key()
+		 */
 		void setBool(bool value) {
 			m_element->setBool(value);
-		}		
+		}
+
+		/**
+		 * @brief expose Element::setString so it can be called straight after a call to key()
+		 */
 		void setString(string value) {
 			m_element->setString(value);
 		}
+
+		/**
+		 * @brief expose Element::setFloat so it can be called straight after a call to key()
+		 */
 		void setFloat(float value) {
 			m_element->setFloat(value);
 		}
@@ -706,7 +798,7 @@ public:
 	list<Proxy*> m_pProxys;
 
 	/**
-	 * find by key the element which should be set in subsequent call to set()
+	 * @brief find by key the element whose value should be set in the subsequent call to set()
 	 * returns a temporary proxy object which stores a pointer to the value to be set
 	*/
 	Proxy key (string key) {
@@ -716,7 +808,7 @@ public:
 	}
 
 	/**
-	 * find by index the element which should be set in subsequent call to set()
+	 * @brief find by index the element whose value should be set in the subsequent call to set()
 	 * returns a temporary proxy object which stores a pointer to the value to be set
 	*/
 	Proxy key(int index) {
@@ -735,7 +827,7 @@ string largeExample = "{ \"name\":\"charlie\", \"age\":24, \"parents\": { \"moth
 
 //read json from file
 ifstream stream("./json-examples/test.json");
-easyJson fileJson(stream);
+SimpleJson fileJson(stream);
 stream.close();
 
 //save json to file
@@ -744,14 +836,14 @@ ostream << fileJson.generateJsonString();
 ostream.close();
 
 //read json from string literal
-easyJson exampleJson(example);
+SimpleJson exampleJson(example);
 
 //compare input string literal to serialised json object
 cout << exampleJson.m_jsonString << endl;
 cout << exampleJson.generateJsonString() << endl;
 
 //get json object
-easyJson person = exampleJson.get("person");
+SimpleJson person = exampleJson.get("person");
 
 //serialise the new json
 cout << person.generateJsonString() << endl;
@@ -793,10 +885,10 @@ person.key("city").setString("london");
 cout << person.generateJsonString() << endl;
 
 //read json with array from string literal
-easyJson individual(arrayExample);
+SimpleJson individual(arrayExample);
 
 //get json array
-easyJson my_skills = individual.get("skills");
+SimpleJson my_skills = individual.get("skills");
 
 //serialise new json
 cout << my_skills.generateJsonString() << endl;
