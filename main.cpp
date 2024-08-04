@@ -1,11 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <map>
-#include <vector>
 #include <algorithm>
-#include <iterator>
-#include <set>
 #include <list>
 using namespace std;
 /**
