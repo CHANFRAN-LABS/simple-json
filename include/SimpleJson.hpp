@@ -353,6 +353,7 @@ private:
 			return;
 		}
 		pCurrentElement->m_pParentElement->m_pNextElement = pCurrentElement;
+		pCurrentElement->m_pPrevElement = pCurrentElement->m_pParentElement;
 		pCurrentElement->m_pParentElement = pCurrentElement->m_pParentElement->m_pParentElement;
 	}
 
