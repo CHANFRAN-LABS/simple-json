@@ -1,4 +1,4 @@
-#include "SimpleJson.hpp"
+#include "./include/SimpleJson.hpp"
 
 int main() {
 string example = "{\"person\": {\"name\": \"charlie\", \"skills\": true, \"age\": 27}}";
@@ -6,27 +6,36 @@ string arrayExample = "{\"name\": \"charlie\", \"skills\": [5, \"drawing\", fals
 string largeExample = "{ \"name\":\"charlie\", \"age\":24, \"parents\": { \"mother\": true, \"father\": { \"name\": \"steve\", \"age\": \"50\" }}, \"dob\": \"123456\"}";
 
 //read json from file
-ifstream stream("./json-examples/test.json");
+ifstream stream("./examples/basic-valid.json");
 SimpleJson fileJson(stream);
 stream.close();
 
 //save json to file
-ofstream ostream("./json-examples/test-out.json");
-ostream << fileJson.generateJsonString();
+ofstream ostream("./examples/output.json");
+ostream << fileJson.serialize();
 ostream.close();
+
+ifstream bigStream("./examples/large-valid.json");
+SimpleJson bigJson(bigStream);
+ifstream inputStream("./examples/large-valid.json");
+std::ostringstream buffer;
+buffer << inputStream.rdbuf();
+string input = buffer.str();
+cout << "input" << endl << input << endl;
+cout << "output" << endl << bigJson.serialize() << endl;
 
 //read json from string literal
 SimpleJson exampleJson(example);
 
 //compare input string literal to serialised json object
-cout << exampleJson.m_jsonString << endl;
-cout << exampleJson.generateJsonString() << endl;
+cout << example << endl;
+cout << exampleJson.serialize() << endl;
 
 //get json object
 SimpleJson person = exampleJson.get("person");
 
 //serialise the new json
-cout << person.generateJsonString() << endl;
+cout << person.serialize() << endl;
 
 //get string value from json
 string name;
@@ -47,7 +56,7 @@ if (person.get("age").isFloat()) {
 }
 
 //serialise the modified json
-cout << person.generateJsonString() << endl;
+cout << person.serialize() << endl;
 
 //set json value to string
 person.key("skills").setString("coding");
@@ -62,7 +71,7 @@ person.key("age").setFloat(36.5);
 person.key("city").setString("london");
 
 //serialise the modified json
-cout << person.generateJsonString() << endl;
+cout << person.serialize() << endl;
 
 //read json with array from string literal
 SimpleJson individual(arrayExample);
@@ -71,7 +80,7 @@ SimpleJson individual(arrayExample);
 SimpleJson my_skills = individual.get("skills");
 
 //serialise new json
-cout << my_skills.generateJsonString() << endl;
+cout << my_skills.serialize() << endl;
 
 //get string value from array
 string skill;
@@ -86,6 +95,6 @@ my_skills.key(2).setFloat(567);
 my_skills.key(6).setString("dancing");
 
 //serialise the modified json
-cout << my_skills.generateJsonString() << endl;
+cout << my_skills.serialize() << endl;
 
 }
