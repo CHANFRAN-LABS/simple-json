@@ -1,5 +1,5 @@
 # SIMPLEJSON
-### A simple, lightweight json library for C++ using an intuitive javascript-like user interface
+### A lightweight json library for C++ with a simple user interface
 - SimpleJson uses a DOM-style tree data structure to store JSON elements.
 - The user API aims to be simple, combining modern JSON syntax with a cpp-friendly style. 
 ### Installation
