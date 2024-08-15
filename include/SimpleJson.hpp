@@ -3,7 +3,6 @@
 #include <sstream>
 #include <algorithm>
 #include <list>
-#include <gtest/gtest.h>
 using namespace std;
 
 /**
@@ -116,10 +115,16 @@ private:
 		m_value = value;
 		if (value == "") {
 			m_valueType = type;
-		} else if (value[0] == '\"') {
+			return;
+		} 
+		if (value.find('\"') != string::npos) {
+			int start = value.find_first_of('\"');
+			int end = value.find_last_of('\"');
 			m_valueType = STRING;
-			m_value = value.substr(1,value.size()-2);
-		} else if (value == "true" || value == "false") {
+			m_value = value.substr(start+1,end-1);
+			return;
+		}
+		if (value == "true" || value == "false") {
 			m_valueType = BOOL;
 		} else if (value == "null") {
 			m_valueType = EMPTY;
@@ -134,6 +139,7 @@ private:
 	 * @brief get the key from an element to append to json string during serialization
 	 */
 	string getKey() {
+		if (!getParent()) return "\"" + m_key + "\": ";
 		switch (m_pParentElement->m_valueType) {
 			case ARRAY:
 				return "";
@@ -145,10 +151,17 @@ private:
 	}
 
 	/**
-	 * @brief get the value from an element - if valueType is string need to add ""
+	 * @brief get the value from an element - if valueType is string need to add "" for json serialization
 	 */
-	string getValue() {
+	string getValueForJson() {
 		if (m_valueType == STRING) return "\"" + m_value + "\"";
+		return m_value;
+	}
+
+	/**
+	 * @brief get the value from an element when returning raw value
+	 */
+	string getValueRaw() {
 		return m_value;
 	}
 
@@ -242,6 +255,7 @@ private:
 	string m_parseString;
 	bool m_exitingParent = false;
 	bool m_backToStart = false;
+	int m_delimiterPos;
 	Element* m_pFirstElement;
 	list<Element*> m_pElements;
 public:
@@ -397,30 +411,25 @@ private:
 	//----------------------------- DESERIALISATION METHODS ------------------------------//
 
 	/**
-	 * @brief remove spaces, linebreaks, tabs from string
-	 */
-	string removeWhitespace(string input) {
-		input.erase(remove(input.begin(), input.end(), ' '), input.end());
-		input.erase(remove(input.begin(), input.end(), '\n'), input.end());
-		input.erase(remove(input.begin(), input.end(), '\t'), input.end());
-		return input;
-	}
-
-	/**
 	 * 
 	 * @brief clean the input json string then deserialize it to build the element tree
 	*/
 	void cleanAndParse(string input) {
 		m_jsonString = input;
-		m_cleanString = removeWhitespace(input);
-		parseJsonString(m_cleanString);
+		parseJsonString(m_jsonString);
 	}
 
 	/**
-	 * @brief find the next special character in json string
+	 * @brief find the next special character in json string and remove whitespace
 	*/
-	char findNextDelimiter(string input) {
-		for (char& character : input) {
+	char findNextDelimiter() {
+		bool insideString = false;
+		for (int i = 0; i<m_parseString.size();) {
+			m_delimiterPos = i;
+			char& character = m_parseString[i];
+			i++;
+			if (character == '\"') insideString = !insideString;
+			if (insideString) continue;
 			switch (character) {
 				case ':':
 					return ':';
@@ -434,6 +443,11 @@ private:
 					return '[';
 				case ']':
 					return ']';
+				case ' ':
+				case '\n':
+				case '\t':
+					i--;	//decrement as we are deleting the current character
+					m_parseString.erase(i, 1);
 				default:
 					continue;
 			}
@@ -446,9 +460,8 @@ private:
 	 * @brief consume next colon to get the current element's key
 	 */
 	void handleColon(Element* pElement) {
-		int pos = m_parseString.find_first_of(':');
-		pElement->setKey(m_parseString.substr(1, pos-2));
-		m_parseString.erase(0, pos+1);
+		pElement->setKey(m_parseString.substr(1, m_delimiterPos-2));
+		m_parseString.erase(0, m_delimiterPos+1);
 	}
 
 	/**
@@ -456,14 +469,13 @@ private:
 	 * special case where the previous special char was a close bracket, in which case there is no value to populate
 	 */
 	Element* handleComma(Element* pElement) {
-		int pos = m_parseString.find_first_of(',');
 		if (m_exitingParent) {
-			m_parseString.erase(0, pos+1);
+			m_parseString.erase(0, m_delimiterPos+1);
 			m_exitingParent = false;
 			return pElement;
 		} else {
-			pElement->setValue(m_parseString.substr(0, pos), pElement->EMPTY);
-			m_parseString.erase(0, pos+1);
+			pElement->setValue(m_parseString.substr(0, m_delimiterPos), pElement->EMPTY);
+			m_parseString.erase(0, m_delimiterPos+1);
 			return addElement(pElement);
 		}
 	}
@@ -472,10 +484,8 @@ private:
 	 * @brief consume next open bracket to create a new branch of the element tree
 	 */
 	Element* handleOpenBracket(Element* pElement, Element::valueType valueType) {
-		char delimiter = valueType == Element::OBJECT ? '{' : '[';
-		int pos = m_parseString.find_first_of(delimiter);
+		m_parseString.erase(0, m_delimiterPos+1);
 		pElement->setValue("", valueType);
-		m_parseString.erase(0, pos+1);
 		return addChild(pElement);
 	}
 
@@ -484,15 +494,13 @@ private:
 	 * special case if prev special char was a close bracket, in this case we move the new element up a layer
 	 */
 	Element* handleCloseBracket(Element* pElement, Element::valueType valueType) {
-		char delimiter = valueType == Element::OBJECT ? '}' : ']';
-		int pos = m_parseString.find_first_of(delimiter);
 		if (m_exitingParent) {
 			moveNextUp(pElement);
-			m_parseString.erase(0, pos+1);
+			m_parseString.erase(0, m_delimiterPos+1);
 			return pElement;
 		} else {
-			pElement->setValue(m_parseString.substr(0, pos), Element::valueType::EMPTY);
-			m_parseString.erase(0, pos+1);
+			pElement->setValue(m_parseString.substr(0, m_delimiterPos), Element::valueType::EMPTY);
+			m_parseString.erase(0, m_delimiterPos+1);
 			if (backToStart(pElement)) return pElement;
 			m_exitingParent = true;
 			return addLastChild(pElement);
@@ -512,7 +520,7 @@ private:
 		m_pElements.push_back(pElement);
 
 		while (m_parseString != "" && !m_backToStart) {
-			delimiter = findNextDelimiter(m_parseString);
+			delimiter = findNextDelimiter();
 			switch (delimiter) {
 				case ':':
 					handleColon(pElement);
@@ -579,19 +587,19 @@ private:
 		string output;
 		Element* pElement = m_pFirstElement;
 		if (isPrimitiveJson()) {
-			return m_pFirstElement->getValue();
+			return m_pFirstElement->getValueForJson();
 		}
 		bool exitingParent = false;
 		while(pElement) {
 			Element currentElement = *pElement;
 			if (currentElement.getChild()) {
-				output.append("\"" + currentElement.m_key + "\": " + currentElement.getOpenBracket()); //could put the first bit in getKey by returning the non empty option if (getChild)
+				output.append(currentElement.getKey() + currentElement.getOpenBracket()); //could put the first bit in getKey by returning the non empty option if (getChild)
 				pElement = currentElement.getChild();
 			} else if (currentElement.getNext()) {
-				output.append(currentElement.getKey() + currentElement.getValue() + ", ");
+				output.append(currentElement.getKey() + currentElement.getValueForJson() + ", ");
 				pElement = currentElement.getNext();
 			} else if (currentElement.getParent()) {
-				output.append(currentElement.getKey() + currentElement.getValue());
+				output.append(currentElement.getKey() + currentElement.getValueForJson());
 				pElement = exitBranchAppend(pElement, output);
 			} else {
 				break;
@@ -682,7 +690,7 @@ public:
 	 */
 	string getString() {
 		if(m_pFirstElement->m_valueType != Element::valueType::STRING) throw invalid_argument("element is not a string");
-		return m_pFirstElement->getValue();
+		return m_pFirstElement->getValueRaw();
 	}
 
 	/**
@@ -697,7 +705,7 @@ public:
 	 */
 	float getFloat() {
 		if(m_pFirstElement->m_valueType != Element::valueType::NUMBER) throw invalid_argument("element is not a number");
-		return stof(m_pFirstElement->getValue());
+		return stof(m_pFirstElement->getValueRaw());
 	}
 
 	//----------------------------- SET METHODS ------------------------------//
