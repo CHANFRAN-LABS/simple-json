@@ -1,0 +1,4 @@
+tests/build/*
+.vscode/*
+
+notes.txt
